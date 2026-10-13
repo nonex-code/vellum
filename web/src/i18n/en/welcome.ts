@@ -12,13 +12,11 @@ export const welcome: Record<string, string> = {
   '先在本地建一个 git 仓库并立即开始；需要备份或换设备时，再关联远程仓库即可。':
     'Create a local git repository and start right away; attach a remote later whenever you need backup or a device switch.',
   '我的工作台': 'My workspace',
-  '工作台名称': 'Workspace name',
   '请输入名称': 'Enter a name',
   '存放目录': 'Storage directory',
   '留空则自动创建在数据目录下': 'Leave empty to create it under the data directory automatically',
   '一个仓库就是一个项目集，按「项目集 → 项目 → 任务」三层组织；单项目仓库之后也能在「项目集」页一键转为项目集':
     'One repository is one portfolio, organized as Portfolio → Project → Issue; a single-project repository can also be converted to a portfolio with one click on the Portfolio page.',
-  '单项目': 'Single project',
   '高级：远程备份 / ID 前缀': 'Advanced: remote backup / ID prefix',
   '远程仓库（可选）': 'Remote repository (optional)',
   '填入一个空仓库地址，本地提交会同步过去':

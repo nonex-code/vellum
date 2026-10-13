@@ -163,8 +163,8 @@ Go 1.27 单体服务（`net/http`，无框架）· `go:embed` 单二进制 · Wa
 
 # English
 
-A workbench that runs both in the browser and as a desktop app: issue-style task tracking where every
-piece of data is **Markdown and git plain text** inside the repository. A single Go binary serves the API and
+Vellum is a task workspace that runs both in the browser and as a desktop app: issue-style tracking where
+every piece of data is **Markdown and git plain text** inside the repository. A single Go binary serves the API and
 serves the React/Ant Design frontend, which is baked in with `go:embed`.
 
 
@@ -217,12 +217,12 @@ make dev            # cd web && npm run dev — page at http://localhost:5173
 
 The first screen is the welcome page, with two paths:
 
-- **New workbench**: create a local git repository and start immediately; use "Attach remote" in the top bar
+- **New workspace**: create a local git repository and start immediately; use "Attach remote" in the top bar
   when you want a backup or another device.
 - **Open an existing repository**: clone from a URL or point at an existing local directory
   (a non-git folder is initialized with `git init`).
 
-A workbench *is* a git repository. With no remote configured it works fully offline and the top bar shows
+A workspace *is* a git repository. With no remote configured it works fully offline and the top bar shows
 "Local only".
 
 ### Desktop build (Wails shell)

@@ -3,8 +3,6 @@
 export const issues: Record<string, string> = {
   // 任务详情
   已更新: 'Updated',
-  已删除: 'Deleted',
-  已保存: 'Saved',
   已提交: 'Posted',
   内容不能为空: 'Content cannot be empty',
   已添加子任务: 'Subtask added',
@@ -12,14 +10,12 @@ export const issues: Record<string, string> = {
   任务不存在: 'Issue not found',
   标题已更新: 'Title updated',
   返回列表: 'Back to list',
-  '{time} 更新': 'Updated {time}',
   '删除这个任务？': 'Delete this issue?',
   '会连同其跟进与附件一起从仓库删除，且不可撤销。':
     'This removes the issue together with its follow-ups and attachments from the repository, and it cannot be undone.',
   点击编辑标题: 'Click to edit title',
   属于: 'Belongs to',
   '（无描述）': '(No description)',
-  子任务: 'Subtasks',
   '还没有子任务。': 'No subtasks yet.',
   标记为未完成: 'Mark as not done',
   标记为已完成: 'Mark as done',
@@ -39,7 +35,6 @@ export const issues: Record<string, string> = {
 
   // 任务列表
   编号: 'ID',
-  '载入中…': 'Loading…',
   '{count} 个任务': '{count} issues',
   搜索标题或正文: 'Search titles or bodies',
   全部状态: 'All statuses',
@@ -51,7 +46,6 @@ export const issues: Record<string, string> = {
   按创建: 'Recently created',
   按优先级: 'By priority',
   按标题: 'By title',
-  树形: 'Tree',
   没有匹配的任务: 'No matching issues',
   还没有任务: 'No issues yet',
   创建第一个任务: 'Create your first issue',
@@ -60,7 +54,6 @@ export const issues: Record<string, string> = {
   '已创建 {id}': 'Created {id}',
   新任务: 'Create',
   从模板开始: 'Start from a template',
-  请输入标题: 'Enter a title',
   一句话描述这个任务: 'Describe this issue in one sentence',
   留空表示未指派: 'Leave empty to leave unassigned',
   选择或输入标签: 'Pick or type labels',
@@ -70,7 +63,7 @@ export const issues: Record<string, string> = {
   '背景、复现步骤、验收标准…': 'Context, steps to reproduce, acceptance criteria…',
   自定义字段: 'Custom fields',
 
-  // 看板（'看板' 由 chrome.ts 提供）
+  // 看板（'看板' 由 common.ts 提供）
   已创建任务: 'Issue created',
   '在「{name}」快速添加': 'Quick add to “{name}”',
   '任务标题，回车创建': 'Issue title, press Enter to create',

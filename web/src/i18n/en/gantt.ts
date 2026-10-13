@@ -1,7 +1,6 @@
 // 甘特图。
 // 「甘特图」「新建任务」已由 chrome / home 翻译，此处不重复定义。
 export const gantt: Record<string, string> = {
-  '载入中…': 'Loading…',
   '按周': 'Week',
   '按月': 'Month',
   '回到今天': 'Back to today',

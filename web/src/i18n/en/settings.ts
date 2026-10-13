@@ -22,8 +22,6 @@ export const settings: Record<string, string> = {
   保存配置: 'Save configuration',
 
   // ---- components/SettingsBasicTab.tsx ----
-  看板: 'Board',
-  树形: 'Tree',
   拖拽卡片按状态整理: 'Drag cards to organize by status',
   '按里程碑/时间线排期': 'Schedule by milestone / timeline',
   '仓库内 Markdown 文档库': 'Markdown doc library in the repository',
@@ -34,8 +32,6 @@ export const settings: Record<string, string> = {
   仅正文清单: 'Checklist in body only',
   独立子任务: 'Independent subtasks',
   '清单 + 子任务': 'Checklist + subtasks',
-  首页: 'Home',
-  任务列表: 'Issue list',
   已转为多项目模式: 'Converted to multi-project mode',
   已转为单项目模式: 'Converted to single-project mode',
   仓库级: 'Repository level',
@@ -46,18 +42,15 @@ export const settings: Record<string, string> = {
   '写入 projects/{path}/workbench.yaml，仅覆盖当前项目。':
     'Writes to projects/{path}/workbench.yaml and only overrides the current project.',
   工作台信息: 'Workspace Info',
-  工作台名称: 'Workspace name',
   界面语言: 'Interface language',
   '仓库默认语言；本机用顶栏「中/EN」切换会覆盖它，且不影响任何数据。':
     'Repository default language; the top-bar 中/EN switch overrides it on this machine and never touches your data.',
   '例如 WB': 'e.g. WB',
   默认视图: 'Default view',
   模块开关: 'Module Toggles',
-  子任务: 'Subtasks',
   '单 / 多项目模式转换': 'Single / Multi-project Mode Conversion',
   '当前模式：': 'Current mode:',
   '多项目（项目集）': 'Multi-project (portfolio)',
-  单项目: 'Single project',
   '。模式转换由后端直接改写仓库结构，不经过上面的表单保存。':
     '. Mode conversion rewrites the repository structure directly on the backend, without going through the form save above.',
   '转为多项目模式？': 'Convert to multi-project mode?',
@@ -116,7 +109,6 @@ export const settings: Record<string, string> = {
 
   // ---- components/SettingsYamlTab.tsx ----
   已保存并生效: 'Saved and applied',
-  重新加载: 'Reload',
   文件路径: 'File path',
   当前为内置默认: 'Currently using the built-in defaults',
   '该作用域还没有 workbench.yaml 文件；保存后会把下面的内容写入仓库。':

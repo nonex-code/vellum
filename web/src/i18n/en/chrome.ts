@@ -26,9 +26,6 @@ export const chrome: Record<string, string> = {
   远程地址: 'Remote URL',
 
   // 侧边导航（Nav.tsx）
-  '首页': 'Home',
-  '任务列表': 'Issue list',
-  '看板': 'Board',
   '甘特图': 'Gantt chart',
   '甘特': 'Gantt',
   '项目集管理': 'Portfolio management',
