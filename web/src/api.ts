@@ -1,0 +1,84 @@
+import type { Doc, DocHit, Entry, GanttGroup, Issue, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit } from './types'
+import { getLang, t } from './i18n'
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  // 每次请求带上界面语言，后端提示语跟着切换。
+  const headers = new Headers(init?.headers)
+  headers.set('X-WB-Lang', getLang())
+  const r = await fetch(path, { ...init, headers })
+  const ct = r.headers.get('content-type') || ''
+  const data = ct.includes('json') ? await r.json() : await r.text()
+  if (!r.ok) {
+    const msg = data && typeof data === 'object' && 'error' in data ? (data as { error: string }).error : r.statusText
+    throw new Error(msg || t('请求失败 ({status})', { status: r.status }))
+  }
+  return data as T
+}
+
+function json(body: unknown, method = 'POST'): RequestInit {
+  return {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }
+}
+
+export const api = {
+  repo: () => req<RepoInfo>('/api/repo'),
+  schema: () => req<Schema>('/api/schema'),
+  overview: () => req<Overview>('/api/overview'),
+  open: (repo: string) => req<{ ok: boolean }>('/api/open', json({ repo })),
+  createWorkspace: (body: { name: string; dir?: string; remote?: string; prefix?: string; mode?: string }) =>
+    req<{ ok: boolean; schema: Schema; root: string; pushError?: string }>('/api/workspace', json(body)),
+  attachRemote: (url: string) =>
+    req<{ ok: boolean; remote: string; pushError?: string }>('/api/remote', json({ url })),
+  sync: () => req<{ ok: boolean }>('/api/sync', { method: 'POST' }),
+
+  projects: () => req<{ projects: ProjectMeta[]; current: string }>('/api/projects'),
+  createProject: (body: { name: string; description?: string; id?: string }) =>
+    req<{ ok: boolean; projects: ProjectMeta[] }>('/api/projects', json(body)),
+  selectProject: (project: string) => req<{ ok: boolean }>('/api/select', json({ project })),
+  repos: () => req<{ repos: RepoMeta[]; current: string }>('/api/repos'),
+
+  listIssues: (params: Record<string, string> = {}) =>
+    req<{ issues: Issue[] }>(`/api/issues?${new URLSearchParams(params).toString()}`),
+  getIssue: (id: string) => req<{ issue: Issue; entries: Entry[] }>(`/api/issues/${encodeURIComponent(id)}`),
+  createIssue: (body: Partial<Issue>) => req<{ issue: Issue }>('/api/issues', json(body)),
+  patchIssue: (id: string, body: Record<string, unknown>) =>
+    req<{ issue: Issue }>(`/api/issues/${encodeURIComponent(id)}`, json(body, 'PATCH')),
+  deleteIssue: (id: string) =>
+    req<{ ok: boolean }>(`/api/issues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  addEntry: (id: string, body: { body: string; type?: string }) =>
+    req<{ entry: Entry }>(`/api/issues/${encodeURIComponent(id)}/entries`, json(body)),
+  search: (q: string) => req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  upload: (id: string, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return req<{ path: string; url: string; name: string }>(`/api/issues/${encodeURIComponent(id)}/files`, {
+      method: 'POST',
+      body: fd,
+    })
+  },
+
+  gantt: () => req<{ groups: GanttGroup[] }>('/api/gantt'),
+  projectStats: () => req<{ projects: ProjectStat[]; current: string }>('/api/projects/stats'),
+  renameProject: (id: string, body: { name: string; description?: string }) =>
+    req<{ ok: boolean; projects: ProjectMeta[] }>(`/api/projects/${encodeURIComponent(id)}`, json(body, 'PATCH')),
+  archiveProject: (id: string, archived: boolean) =>
+    req<{ ok: boolean }>(`/api/projects/${encodeURIComponent(id)}`, json({ archived }, 'DELETE')),
+  switchMode: (mode: string) => req<{ ok: boolean; mode: string }>('/api/config/mode', json({ mode })),
+  getRawConfig: (scope: 'repo' | 'project') =>
+    req<{ path: string; yaml: string; exists: boolean }>(`/api/config/raw?scope=${scope}`),
+  putRawConfig: (scope: 'repo' | 'project', yamlText: string, managed?: string[]) =>
+    req<{ ok: boolean }>('/api/config/raw', json({ scope, yaml: yamlText, managed }, 'PUT')),
+
+  listDocs: () => req<{ docs: Doc[] }>('/api/docs'),
+  createDoc: (body: { title: string; path?: string; tags?: string[]; body?: string }) =>
+    req<{ doc: Doc }>('/api/docs', json(body)),
+  getDoc: (path: string) => req<{ doc: Doc }>(`/api/docs/doc?path=${encodeURIComponent(path)}`),
+  updateDoc: (path: string, body: Record<string, unknown>) =>
+    req<{ doc: Doc }>(`/api/docs/doc?path=${encodeURIComponent(path)}`, json(body, 'PUT')),
+  deleteDoc: (path: string) =>
+    req<{ ok: boolean }>(`/api/docs/doc?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+  searchDocs: (q: string) => req<{ hits: DocHit[] }>(`/api/docs/search?q=${encodeURIComponent(q)}`),
+}

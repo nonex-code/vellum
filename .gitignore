@@ -1,0 +1,25 @@
+# 构建产物 / build artifacts
+/vellum
+/vellum.exe
+/vellum-desktop.exe
+*.exe~
+*.log
+
+# 前端依赖与构建产物：dist 全部由 `make web`（或 CI）生成，不进版本库
+/web/node_modules/
+/web/dist/
+
+# 运行时数据：本机打开过的仓库索引，不属于项目源码
+/data/
+
+# 会话草稿与本地工具状态
+/_smoke/
+/.preview-seed/
+/.workbuddy/
+/.agents/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

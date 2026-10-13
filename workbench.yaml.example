@@ -1,0 +1,57 @@
+# Vellum 工作台配置（可选）
+# 全部字段都可缺省；缺省时使用内置默认。只写“不一样的地方”。
+
+workspace:
+  name: 我的工作台
+  mode: single          # single（根即项目） | multi（projects/<id>/ 多个项目）
+
+idPrefix: WB
+
+# 覆盖默认状态集合（不写则用内置的 todo/doing/blocked/review/done/cancelled）
+# statuses:
+#   - { id: todo,  name: 待办,   category: todo,   color: "#60a5fa" }
+#   - { id: doing, name: 进行中, category: active, color: "#f59e0b" }
+#   - { id: done,  name: 已完成, category: done,   color: "#22c55e" }
+
+# 标签（默认内置 bug/feature/docs/question，可覆盖）
+labels:
+  - { id: bug,     name: 缺陷, color: "#B3402B" }
+  - { id: feature, name: 功能, color: "#2A4C8F" }
+
+# 里程碑（默认空；有值时详情/筛选/新建会出现里程碑选择）
+# 可选 start/end（YYYY-MM-DD）用于甘特图的区间条
+# milestones:
+#   - { id: v1, name: v1.0, order: 1, start: 2026-10-01, end: 2026-11-30 }
+
+# 自定义字段（默认空；type: text | number | date | select）
+# fields:
+#   - { id: env,  name: 环境,   type: select, options: [dev, stage, prod] }
+#   - { id: due,  name: 截止日, type: date }
+
+# 新建任务模板（默认内置“缺陷报告/功能需求”两个）
+# templates:
+#   - id: bug
+#     name: 缺陷报告
+#     type: bug
+#     priority: high
+#     labels: [bug]
+#     body: "## 现象\n\n## 复现\n"
+
+# 事件回调：任务/跟进/附件变更时 POST JSON（event、project、at、data）
+# webhook:
+#   url: https://example.com/hook
+#   events: ["issue.create", "issue.update", "entry.create", "*"]
+
+modules:
+  attachments: true
+  search: true
+  milestones: true
+  board: true
+  gantt: true          # 甘特图（任务 frontmatter 可写 start/due 日期）
+  docs: true           # 文档中心（docs/ 目录，Markdown 纯文本）
+  tree: true
+  subtasks: both        # off | checklist | issue | both
+
+views:
+  default: list
+  nav: [issues, search, settings]
