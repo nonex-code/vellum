@@ -152,11 +152,15 @@ jobs:
 
       # macOS 桌面壳走 Cocoa/WebKit，需要 CGO（runner 自带 Xcode 工具链）。
       # Apple Silicon runner 上由 clang 交叉编译 amd64（Apple 工具链支持 -arch）。
+      # Wails v2.16 的 WailsContext.h 会 import <UniformTypeIdentifiers/UTType.h>，
+      # 但其 cgo LDFLAGS 未链接该框架，新 Xcode/SDK 下会报 _OBJC_CLASS_$_UTType 未定义，
+      # 故在此补上 -framework UniformTypeIdentifiers。
       - name: Build
         env:
           GOOS: darwin
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: '1'
+          CGO_LDFLAGS: '-framework UniformTypeIdentifiers'
         run: |
           mkdir -p dist
           bin="vellum-$VERSION-desktop-darwin-$GOARCH"
