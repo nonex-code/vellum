@@ -94,8 +94,7 @@ body {
 
 /* ---------- 版心 ---------- */
 .page {
-  max-width: 1080px;
-  margin: 0 auto;
+  width: 100%;
   padding: 32px 28px 100px;
 }
 
@@ -750,6 +749,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* 与 Ant Design 默认控件（32px）同高，避免自定义幽灵按钮偏矮 */
+  height: 32px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--ink-soft);

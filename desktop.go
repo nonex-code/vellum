@@ -44,6 +44,10 @@ func main() {
 		Height:    900,
 		MinWidth:  900,
 		MinHeight: 600,
+		// 生产构建下 Wails 默认关闭 WebView 原生右键菜单，导致无法右键复制；
+		// 打开后恢复桌面应用该有的复制/粘贴体验（Wails 的 auto 行为：仅在
+		// 选中文本、可编辑区域或输入框上才弹出，空白处不弹）。
+		EnableDefaultContextMenu: true,
 		AssetServer: &assetserver.Options{
 			Handler: shell,
 		},

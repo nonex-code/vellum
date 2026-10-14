@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -19,6 +19,7 @@ jobs:
   server:
     name: Server (${{ matrix.os }}-${{ matrix.arch }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +35,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Version
         run: echo "VERSION=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')" >> "$GITHUB_ENV"
@@ -74,6 +77,7 @@ jobs:
   desktop:
     name: Desktop shell (windows-amd64)
     runs-on: windows-latest
+    timeout-minutes: 45
     # Wails 壳只在 Windows 构建：其他平台需要 GTK/WebKit 原生依赖，交叉编译不成立。
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +85,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Version
         run: echo "VERSION=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')" >> "$GITHUB_ENV"
@@ -94,9 +100,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Windows 桌面构建无需 CGO（WebView2 走纯 Go syscall）；
+      # 与 `wails build` 一致，这里不设 CGO_ENABLED，继承默认值。
       - name: Build
         env:
-          CGO_ENABLED: '0'
+          GOOS: windows
+          GOARCH: amd64
         run: |
           mkdir -p dist
           bin="vellum-$VERSION-desktop-windows-amd64"
@@ -116,8 +125,12 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [server, desktop]
+    # 任一构建 job 失败则不发布（needs 的默认语义）；仅 v* 标签发版。
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:

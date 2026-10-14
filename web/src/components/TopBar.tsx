@@ -62,7 +62,7 @@ function LangToggle() {
       onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
       title={lang === 'zh' ? 'Switch to English' : '切换到中文'}
       aria-label={t('切换语言')}
-      style={{ padding: '5px 9px', fontSize: 12, fontWeight: 600 }}
+      style={{ padding: '5px 9px', minWidth: 38, justifyContent: 'center' }}
     >
       {lang === 'zh' ? 'EN' : '中'}
     </button>
