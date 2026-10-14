@@ -214,7 +214,7 @@ func (u *Updater) pickAsset(rel *release) *asset {
 		if (Mode == "desktop") != isDesktop {
 			continue
 		}
-		if Mode == "web" && (!strings.Contains(n, runtime.GOOS) || !strings.Contains(n, runtime.GOARCH)) {
+		if !strings.Contains(n, runtime.GOOS) || !strings.Contains(n, runtime.GOARCH) {
 			continue
 		}
 		if !strings.HasSuffix(n, ".zip") && !strings.HasSuffix(n, ".tar.gz") {
@@ -297,14 +297,14 @@ func (u *Updater) get(url string) (*http.Response, error) {
 // assetName 依据 release.yml 的产物命名规则推导当前平台应下载的资产名。
 // tag 形如 v1.2.3：
 //   - web：vellum-<tag>-<goos>-<goarch>.zip（windows）/ .tar.gz（其它）
-//   - desktop：vellum-<tag>-desktop-windows-amd64.zip
+//   - desktop：vellum-<tag>-desktop-<goos>-<goarch>.zip（windows）/ .tar.gz（其它）
 func assetName(tag, mode, goos, goarch string) string {
-	if mode == "desktop" {
-		return fmt.Sprintf("vellum-%s-desktop-windows-amd64.zip", tag)
-	}
 	ext := ".tar.gz"
 	if goos == "windows" {
 		ext = ".zip"
+	}
+	if mode == "desktop" {
+		return fmt.Sprintf("vellum-%s-desktop-%s-%s%s", tag, goos, goarch, ext)
 	}
 	return fmt.Sprintf("vellum-%s-%s-%s%s", tag, goos, goarch, ext)
 }

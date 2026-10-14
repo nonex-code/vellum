@@ -54,6 +54,9 @@ func TestAssetName(t *testing.T) {
 		{"v1.2.3", "web", "linux", "amd64", "vellum-v1.2.3-linux-amd64.tar.gz"},
 		{"v1.2.3", "web", "darwin", "arm64", "vellum-v1.2.3-darwin-arm64.tar.gz"},
 		{"v1.2.3", "desktop", "windows", "amd64", "vellum-v1.2.3-desktop-windows-amd64.zip"},
+		{"v1.2.3", "desktop", "darwin", "amd64", "vellum-v1.2.3-desktop-darwin-amd64.tar.gz"},
+		{"v1.2.3", "desktop", "darwin", "arm64", "vellum-v1.2.3-desktop-darwin-arm64.tar.gz"},
+		{"v1.2.3", "desktop", "linux", "amd64", "vellum-v1.2.3-desktop-linux-amd64.tar.gz"},
 	}
 	for _, c := range cases {
 		if got := assetName(c.tag, c.mode, c.goos, c.goarch); got != c.want {
