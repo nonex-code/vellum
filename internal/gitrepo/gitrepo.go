@@ -19,6 +19,9 @@ func run(dir string, args ...string) (string, error) {
 	if dir != "" {
 		cmd.Dir = dir
 	}
+	// git 需要凭据时只会走凭据助手（GUI），不会向非 tty 的 stdin 发提示，
+	// 所以隐藏控制台窗口不会让调用卡住。
+	hideWindow(cmd)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
