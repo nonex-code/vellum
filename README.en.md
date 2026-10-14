@@ -76,13 +76,16 @@ shell — no binding layer — so the API and data format are identical to the w
 same time (random port, never conflicting with 8420).
 
 ```bash
-make desktop        # go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
-./vellum-desktop.exe
+make desktop        # Windows: go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
+make desktop-unix   # macOS/Linux: go build -tags "desktop,production,webkit2_41" -o vellum-desktop
+./vellum-desktop
 ```
 
 `-tags "desktop,production"` is mandatory when building Wails by hand (without `production` it only shows a
-message box); `-H=windowsgui` hides the console. The desktop build needs the WebView2 runtime (bundled with
-Edge on Windows 10/11).
+message box). Windows uses `-H=windowsgui` to hide the console and needs the WebView2 runtime (bundled with
+Edge on Windows 10/11). macOS/Linux use CGO and need native deps: macOS needs the Xcode toolchain (plus
+linking the `UniformTypeIdentifiers` framework, wired into `make desktop-unix`), and Linux needs GTK3 +
+WebKit2GTK (Ubuntu 24.04 ships `libwebkit2gtk-4.1-dev`, which requires the `webkit2_41` build tag).
 
 ### Environment variables
 
@@ -125,9 +128,11 @@ git push origin v0.1.0
 - The server binary is pure Go (`CGO_ENABLED=0`), cross-compiled for 5 platforms: linux/amd64, linux/arm64,
   darwin/amd64, darwin/arm64, windows/amd64, published as `vellum-<version>-<os>-<arch>.tar.gz|.zip` plus
   `checksums.txt`.
-- The desktop shell (Wails) builds only on a windows runner as `vellum-<version>-desktop-windows-amd64.zip`:
-  other platforms need native GTK/WebKit dependencies, so cross-compiling it is not viable, and running it needs
-  the system WebView2 runtime.
+- The desktop shell (Wails) is built per platform: Windows `vellum-<version>-desktop-windows-amd64.zip` (no CGO,
+  needs the WebView2 runtime), macOS `vellum-<version>-desktop-darwin-amd64|arm64.tar.gz`, and Linux
+  `vellum-<version>-desktop-linux-amd64.tar.gz`. macOS/Linux need native GTK/WebKit libraries and can only be
+  built on their own runners (cross-compiling is not viable); macOS also needs the Xcode toolchain and links the
+  `UniformTypeIdentifiers` framework. Self-update selects this platform's artifact by `desktop-<os>-<arch>`.
 - A manual run (Actions → Release → Run workflow) builds without publishing, for self-checks; tags that do not
   start with `v` never publish.
 

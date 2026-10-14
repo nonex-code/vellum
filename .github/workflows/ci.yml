@@ -47,7 +47,7 @@ jobs:
       - name: Test
         run: go test ./...
 
-  desktop:
+  desktop-windows:
     name: Desktop shell compiles (windows-amd64)
     runs-on: windows-latest
     timeout-minutes: 45
@@ -69,11 +69,80 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # 桌面壳只在 Windows 编译（其他平台需要 GTK/WebKit 原生依赖），
       # 这里只为验证 desktop.go 能编过，产物不发布。Windows 无需 CGO，与 wails build 一致不设 CGO_ENABLED。
       - name: Build (desktop,production)
         env:
           GOOS: windows
           GOARCH: amd64
-        run: go build -trimpath -tags "desktop,production" -ldflags "-s -w -H=windowsgui" -o dist/vellum-desktop.exe .
+        run: |
+          mkdir -p dist
+          go build -trimpath -tags "desktop,production" -ldflags "-s -w -H=windowsgui" -o dist/vellum-desktop.exe .
         shell: bash
+
+  desktop-macos:
+    name: Desktop shell compiles (macos)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Frontend build
+        run: cd web && npm ci && npm run build
+        shell: bash
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Wails darwin 头文件 import 了 UniformTypeIdentifiers，但其 cgo LDFLAGS 未链接该框架，
+      # 新 Xcode/SDK 下需在此补上（详见 release.yml）。
+      - name: Build (desktop,production)
+        env:
+          CGO_ENABLED: '1'
+          CGO_LDFLAGS: '-framework UniformTypeIdentifiers'
+        run: |
+          mkdir -p dist
+          go build -trimpath -tags "desktop,production" -ldflags "-s -w" -o dist/vellum-desktop .
+        shell: bash
+
+  desktop-linux:
+    name: Desktop shell compiles (linux-amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Frontend build
+        run: cd web && npm ci && npm run build
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Wails Linux 需要 GTK3 + WebKit2GTK；Ubuntu 24.04 提供的是 webkit2gtk-4.1，
+      # 对应 Wails 的 webkit2_41 构建标签。
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build (desktop,production)
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          mkdir -p dist
+          go build -trimpath -tags "desktop,production,webkit2_41" -ldflags "-s -w" -o dist/vellum-desktop .
