@@ -67,12 +67,16 @@ web 服务与桌面程序同源共存：`main.go` 里 `newServer()` 一份装配
 Wails 只当窗口壳子，不引入绑定层，所以 API 与数据格式和 web 版完全一致，两者可同时运行（随机端口，不与 8420 冲突）。
 
 ```bash
-make desktop        # go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
-./vellum-desktop.exe
+make desktop        # Windows：go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
+make desktop-unix   # macOS/Linux：go build -tags "desktop,production,webkit2_41" -o vellum-desktop
+./vellum-desktop
 ```
 
-`-tags "desktop,production"` 是 Wails 脱离 CLI 手工构建的硬性要求（少了 `production` 只会弹提示框）；
-`-H=windowsgui` 隐藏控制台窗口。桌面版需要系统的 WebView2 运行时（Win10/11 随 Edge 自带）。
+`-tags "desktop,production"` 是 Wails 脱离 CLI 手工构建的硬性要求（少了 `production` 只会弹提示框）。
+Windows 用 `-H=windowsgui` 隐藏控制台，且需要系统的 WebView2 运行时（Win10/11 随 Edge 自带）。
+macOS/Linux 走 CGO，需要原生依赖：macOS 需 Xcode 工具链（并链接 `UniformTypeIdentifiers` 框架，
+`make desktop-unix` 已内置），Linux 需 GTK3 + WebKit2GTK（Ubuntu 24.04 对应 `libwebkit2gtk-4.1-dev`，
+构建标签加 `webkit2_41`）。
 
 ### 环境变量
 
@@ -113,8 +117,10 @@ git push origin v0.1.0
 
 - 服务端二进制纯 Go（`CGO_ENABLED=0`），交叉编译 5 个平台：linux/amd64、linux/arm64、darwin/amd64、
   darwin/arm64、windows/amd64；产物 `vellum-<版本>-<os>-<arch>.tar.gz|.zip`，随附 `checksums.txt`。
-- 桌面壳（Wails）只在 windows runner 上构建 `vellum-<版本>-desktop-windows-amd64.zip`：其他平台需要
-  GTK/WebKit 原生依赖，交叉编译不成立；运行还需要系统 WebView2 运行时。
+- 桌面壳（Wails）按平台构建：Windows `vellum-<版本>-desktop-windows-amd64.zip`（无需 CGO，需系统 WebView2
+  运行时）、macOS `vellum-<版本>-desktop-darwin-amd64|arm64.tar.gz`、Linux `vellum-<版本>-desktop-linux-amd64.tar.gz`。
+  macOS/Linux 依赖 GTK/WebKit 原生库，只能在对应 runner 上构建（不可交叉编译）；macOS 还需 Xcode 工具链并
+  链接 `UniformTypeIdentifiers` 框架。自更新会按 `desktop-<os>-<arch>` 选中本平台产物。
 - 手动触发（Actions → Release → Run workflow）只构建、不发版，用于自检；非 `v` 开头的标签不会发版。
 
 ## 界面语言（中 / EN）
