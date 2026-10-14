@@ -11,6 +11,7 @@ import SettingsDefsTab from '../components/SettingsDefsTab'
 import SettingsFieldsTab from '../components/SettingsFieldsTab'
 import SettingsTemplatesTab from '../components/SettingsTemplatesTab'
 import SettingsYamlTab from '../components/SettingsYamlTab'
+import UpdatePanel from '../components/UpdatePanel'
 
 export default function Settings() {
   const { schema, repo, reload } = useApp()
@@ -105,6 +106,11 @@ export default function Settings() {
                 projectLabel={projectLabel}
               />
             ),
+          },
+          {
+            key: 'about',
+            label: t('关于'),
+            children: <UpdatePanel />,
           },
         ]}
       />

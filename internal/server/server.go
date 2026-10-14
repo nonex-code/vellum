@@ -20,6 +20,7 @@ import (
 	"github.com/nonex-code/vellum/internal/gitrepo"
 	"github.com/nonex-code/vellum/internal/model"
 	"github.com/nonex-code/vellum/internal/store"
+	"github.com/nonex-code/vellum/internal/update"
 )
 
 // Options 服务端配置。
@@ -31,6 +32,11 @@ type Options struct {
 	AuthUser    string // 可选 HTTP Basic Auth
 	AuthPass    string
 	WebhookURL  string // 可选覆盖 workbench.yaml 中的 webhook
+
+	Version           string // 当前版本号（-ldflags 注入）
+	UpdateRepo        string // GitHub 仓库 owner/name
+	UpdateEnabled     bool   // 是否启用自更新接口
+	UpdateAllowRemote bool   // 是否允许非本机发起更新
 }
 
 // repoEntry 是“已知仓库”的一条记录，持久化在 repos.json。
@@ -59,6 +65,8 @@ type Server struct {
 	reposFile string
 	reposMu   sync.Mutex
 	repos     []repoEntry
+
+	updater *update.Updater // 非 nil 时启用自更新接口
 }
 
 // New 构造服务并注册路由。
@@ -76,6 +84,9 @@ func New(o Options) *Server {
 		reposFile: filepath.Join(o.ProjectsDir, "repos.json"),
 	}
 	s.repos = s.loadRepos()
+	if o.UpdateEnabled {
+		s.updater = update.New(o.UpdateRepo)
+	}
 	s.routes()
 	return s
 }
@@ -112,6 +123,11 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/docs", s.handleDocsList)
 	m.HandleFunc("POST /api/docs", s.handleDocsCreate)
 	m.HandleFunc("GET /api/docs/search", s.handleDocsSearch)
+	m.HandleFunc("GET /api/version", s.handleVersion)
+	if s.updater != nil {
+		m.HandleFunc("GET /api/update/check", s.handleUpdateCheck)
+		m.HandleFunc("POST /api/update/apply", s.handleUpdateApply)
+	}
 	m.HandleFunc("GET /api/docs/doc", s.handleDocsGet)
 	m.HandleFunc("PUT /api/docs/doc", s.handleDocsUpdate)
 	m.HandleFunc("DELETE /api/docs/doc", s.handleDocsDelete)

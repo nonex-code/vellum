@@ -202,3 +202,21 @@ export interface RepoMeta {
   mode?: string
   lastOpened?: string
 }
+
+export interface VersionInfo {
+  version: string
+  mode: string
+  repo: string
+  updatable: boolean
+}
+
+export interface UpdateInfo {
+  current: string
+  latest: string
+  available: boolean
+  notes?: string
+  url?: string
+  asset?: string
+  size?: number
+  publishedAt?: string
+}
