@@ -10,6 +10,35 @@ export const settings: Record<string, string> = {
   里程碑与字段: 'Milestones & Fields',
   模板: 'Templates',
   'YAML 源码': 'YAML Source',
+  关于: 'About',
+
+  // ---- components/UpdatePanel.tsx ----
+  版本信息: 'Version Info',
+  当前版本: 'Current version',
+  构建形态: 'Build',
+  更新源: 'Update source',
+  可自更新: 'Self-update supported',
+  桌面版: 'Desktop',
+  服务器版: 'Server',
+  是: 'Yes',
+  否: 'No',
+  当前构建未启用自更新: 'Self-update is disabled in this build',
+  '启动时设置了 WB_UPDATE=false，或该构建未包含更新接口。':
+    'WB_UPDATE=false was set at startup, or this build does not include the update endpoint.',
+  检查更新: 'Check for updates',
+  更新结果: 'Update Result',
+  最新版本: 'Latest version',
+  状态: 'Status',
+  有新版本可用: 'New version available',
+  已是最新版本: 'Already up to date',
+  发布时间: 'Published at',
+  安装包: 'Package',
+  更新说明: 'Release notes',
+  '立即更新？': 'Update now?',
+  '将下载新版本、校验后原子替换当前程序并自动重启。':
+    'The new version will be downloaded, verified, atomically swapped in, and the app will restart automatically.',
+  更新并重启: 'Update & restart',
+  '正在重启到 {version}…': 'Restarting to {version}…',
 
   // ---- components/SettingsShared.ts ----
   '{name}：有 {count} 项 ID 为空': '{name}: {count} IDs are empty',

@@ -55,7 +55,7 @@ jobs:
           exe=""
           [ "$GOOS" = "windows" ] && exe=".exe"
           name="vellum-$VERSION-$GOOS-$GOARCH"
-          go build -trimpath -ldflags "-s -w" -o "dist/$name$exe" .
+          go build -trimpath -ldflags "-s -w -X github.com/nonex-code/vellum/internal/version.Version=$VERSION" -o "dist/$name$exe" .
           if [ "$GOOS" = "windows" ]; then
             (cd dist && zip "../$name.zip" "$name$exe")
           else
@@ -100,7 +100,7 @@ jobs:
         run: |
           mkdir -p dist
           bin="vellum-$VERSION-desktop-windows-amd64"
-          go build -trimpath -tags "desktop,production" -ldflags "-s -w -H=windowsgui" -o "dist/$bin.exe" .
+          go build -trimpath -tags "desktop,production" -ldflags "-s -w -H=windowsgui -X github.com/nonex-code/vellum/internal/version.Version=$VERSION" -o "dist/$bin.exe" .
           powershell -Command "Compress-Archive -Path 'dist/$bin.exe' -DestinationPath '$bin.zip'"
           sha256sum "$bin.zip" > checksums-desktop-windows-amd64.txt
         shell: bash

@@ -1,4 +1,4 @@
-import type { Doc, DocHit, Entry, GanttGroup, Issue, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit } from './types'
+import type { Doc, DocHit, Entry, GanttGroup, Issue, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit, UpdateInfo, VersionInfo } from './types'
 import { getLang, t } from './i18n'
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -81,4 +81,8 @@ export const api = {
   deleteDoc: (path: string) =>
     req<{ ok: boolean }>(`/api/docs/doc?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
   searchDocs: (q: string) => req<{ hits: DocHit[] }>(`/api/docs/search?q=${encodeURIComponent(q)}`),
+
+  version: () => req<VersionInfo>('/api/version'),
+  checkUpdate: () => req<UpdateInfo>('/api/update/check'),
+  applyUpdate: () => req<{ ok: boolean; version: string }>('/api/update/apply', { method: 'POST' }),
 }

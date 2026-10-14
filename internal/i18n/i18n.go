@@ -49,6 +49,11 @@ const (
 	ConfigUnparsable           = "config_unparsable"
 	ConfigNotMapping           = "config_not_mapping"
 	Unscheduled                = "unscheduled"
+	UpdateCheckFailed          = "update_check_failed"
+	UpdateApplyFailed          = "update_apply_failed"
+	UpdateAlreadyLatest        = "update_already_latest"
+	UpdateNoAsset              = "update_no_asset"
+	UpdateRemoteDenied         = "update_remote_denied"
 )
 
 // entries: key -> {中文, English}
@@ -84,6 +89,11 @@ var entries = map[string][2]string{
 	ConfigUnparsable:           {"现有配置无法解析: %v", "Existing configuration cannot be parsed: %v"},
 	ConfigNotMapping:           {"配置顶层必须是键值映射", "The top level of the configuration must be a key-value mapping"},
 	Unscheduled:                {"未排期", "Unscheduled"},
+	UpdateCheckFailed:          {"检查更新失败: %v", "Update check failed: %v"},
+	UpdateApplyFailed:          {"应用更新失败: %v", "Failed to apply the update: %v"},
+	UpdateAlreadyLatest:        {"当前已是最新版本", "Already on the latest version"},
+	UpdateNoAsset:              {"该发行版没有适用于当前平台的安装包", "This release has no package for the current platform"},
+	UpdateRemoteDenied:         {"出于安全考虑，更新默认只允许本机发起（可设 WB_UPDATE_REMOTE=true 放开，或配置 WB_AUTH）", "For safety, updates may only be triggered from the local machine (set WB_UPDATE_REMOTE=true or configure WB_AUTH to allow remote)"},
 }
 
 // Normalize 把任意语言标记收敛成 zh/en，识别不了就返回空串交给上层回退。

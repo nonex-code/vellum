@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/nonex-code/vellum/internal/server"
+	"github.com/nonex-code/vellum/internal/update"
+	"github.com/nonex-code/vellum/internal/version"
 )
 
 //go:embed all:web/dist
@@ -38,6 +40,8 @@ func defaultDataDir() string {
 // newServer 装配 HTTP 服务：web 模式与桌面壳共用同一份装配逻辑，
 // 桌面模式只是给同一个服务换了个入口（见 desktop.go）。
 func newServer() http.Handler {
+	update.CleanupOld() // 清理上次自更新遗留的 .old 备份
+
 	sub, err := fs.Sub(webFS, "web/dist")
 	if err != nil {
 		log.Fatal(err)
@@ -60,6 +64,11 @@ func newServer() http.Handler {
 		AuthUser:    authUser,
 		AuthPass:    authPass,
 		WebhookURL:  os.Getenv("WB_WEBHOOK"),
+
+		Version:           version.Current(),
+		UpdateRepo:        env("WB_UPDATE_REPO", "nonex-code/vellum"),
+		UpdateEnabled:     env("WB_UPDATE", "true") != "false",
+		UpdateAllowRemote: env("WB_UPDATE_REMOTE", "false") == "true",
 	})
 
 	if repo := os.Getenv("WB_REPO"); repo != "" {
