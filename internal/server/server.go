@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/nonex-code/vellum/internal/i18n"
 	"io"
 	"io/fs"
 	"net/http"
@@ -15,7 +16,6 @@ import (
 	"sync"
 	"time"
 	"unicode"
-	"github.com/nonex-code/vellum/internal/i18n"
 
 	"github.com/nonex-code/vellum/internal/config"
 	"github.com/nonex-code/vellum/internal/gitrepo"
@@ -116,6 +116,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/search", s.handleSearch)
 	m.HandleFunc("GET /api/gantt", s.handleGantt)
 	m.HandleFunc("GET /api/projects/stats", s.handleProjectStats)
+	m.HandleFunc("PUT /api/projects/order", s.handleProjectOrder)
 	m.HandleFunc("PATCH /api/projects/{id}", s.handleRenameProject)
 	m.HandleFunc("DELETE /api/projects/{id}", s.handleArchiveProject)
 	m.HandleFunc("POST /api/config/mode", s.handleConfigMode)
@@ -539,8 +540,80 @@ func (s *Server) projectsMeta() []model.ProjectMeta {
 		}
 		out = append(out, meta)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	po := loadProjectOrder(repoRoot)
+	sortProjects(out, po)
 	return out
+}
+
+// projectOrder 是项目集里项目的自定义顺序与收藏（置顶）列表，
+// 持久化在 projects/.order.json（隐藏文件，目录扫描时会跳过）。
+type projectOrder struct {
+	Pinned []string `json:"pinned"`
+	Order  []string `json:"order"`
+}
+
+func loadProjectOrder(repoRoot string) projectOrder {
+	var po projectOrder
+	if repoRoot == "" {
+		return po
+	}
+	b, err := os.ReadFile(filepath.Join(repoRoot, "projects", ".order.json"))
+	if err == nil {
+		_ = json.Unmarshal(b, &po)
+	}
+	return po
+}
+
+func saveProjectOrder(repoRoot string, po projectOrder) error {
+	dir := filepath.Join(repoRoot, "projects")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(po, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, ".order.json"), b, 0o644)
+}
+
+func projectRanks(po projectOrder) (pinRank, ordRank map[string]int) {
+	pinRank = make(map[string]int, len(po.Pinned))
+	for i, id := range po.Pinned {
+		pinRank[id] = i
+	}
+	ordRank = make(map[string]int, len(po.Order))
+	for i, id := range po.Order {
+		ordRank[id] = i
+	}
+	return
+}
+
+// projectLess 排序规则：收藏优先 → 自定义顺序 → 未列出的排后 → 名称。
+func projectLess(a, b string, pinRank, ordRank map[string]int) bool {
+	pa, ap := pinRank[a]
+	pb, bp := pinRank[b]
+	if ap != bp {
+		return ap
+	}
+	if ap && bp && pa != pb {
+		return pa < pb
+	}
+	ra, aok := ordRank[a]
+	rb, bok := ordRank[b]
+	if aok != bok {
+		return aok
+	}
+	if aok && bok && ra != rb {
+		return ra < rb
+	}
+	return a < b
+}
+
+func sortProjects(out []model.ProjectMeta, po projectOrder) {
+	pinRank, ordRank := projectRanks(po)
+	sort.SliceStable(out, func(i, j int) bool {
+		return projectLess(out[i].ID, out[j].ID, pinRank, ordRank)
+	})
 }
 
 // fire 异步投递 webhook（尽力而为）。
@@ -615,6 +688,7 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 		}
 		if ws.Mode == "multi" {
 			resp["projects"] = s.projectsMeta()
+			resp["pinned"] = loadProjectOrder(s.snapshotRoot()).Pinned
 		}
 	}
 	writeJSON(w, resp)

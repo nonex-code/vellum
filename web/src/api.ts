@@ -78,6 +78,8 @@ export const api = {
 
   gantt: () => req<{ groups: GanttGroup[] }>('/api/gantt'),
   projectStats: () => req<{ projects: ProjectStat[]; current: string }>('/api/projects/stats'),
+  saveProjectOrder: (pinned: string[], order: string[]) =>
+    req<{ ok: boolean; pinned: string[]; order: string[] }>('/api/projects/order', json({ pinned, order }, 'PUT')),
   renameProject: (id: string, body: { name: string; description?: string }) =>
     req<{ ok: boolean; projects: ProjectMeta[] }>(`/api/projects/${encodeURIComponent(id)}`, json(body, 'PATCH')),
   archiveProject: (id: string, archived: boolean) =>

@@ -137,6 +137,8 @@ export interface ProjectStat {
   archived: boolean
   current: boolean
   total: number
+  doing: number
+  overdue: number
   done: number
   updated?: string
 }
@@ -195,6 +197,7 @@ export interface RepoInfo {
   project?: { name: string; mode: string }
   projectMeta?: ProjectMeta
   projects?: ProjectMeta[]
+  pinned?: string[]
 }
 
 export interface RepoMeta {

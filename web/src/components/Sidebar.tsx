@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   ApartmentOutlined,
@@ -9,6 +9,8 @@ import {
   MenuUnfoldOutlined,
   PlusOutlined,
   ProjectOutlined,
+  PushpinFilled,
+  PushpinOutlined,
   RightOutlined,
   SearchOutlined,
   SettingOutlined,
@@ -19,19 +21,30 @@ import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
 import { isProgramScope, projectPath } from '../nav'
-import type { ProjectStat } from '../types'
+import type { ProjectMeta, ProjectStat } from '../types'
 import NewProjectModal from './NewProjectModal'
 
 const MEM_KEY = 'wb.projectViewMem'
 const COLLAPSE_KEY = 'wb.sidebarCollapsed'
+const VISIT_KEY = 'wb.projectVisits'
 // 只记忆“视图级”路径；任务详情/新建等回落到任务列表，避免切项目打开不存在的详情。
 const VIEW_PATHS = new Set(['/', '/issues', '/board', '/gantt', '/docs', '/search', '/settings'])
+// “最近”区最多显示几个项目。
+const RECENT_LIMIT = 4
 
-function loadMem(): Record<string, string> {
+function loadJSON<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(MEM_KEY) || '{}')
+    return JSON.parse(localStorage.getItem(key) || '') as T
   } catch {
-    return {}
+    return fallback
+  }
+}
+
+function saveJSON(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* ignore */
   }
 }
 
@@ -43,8 +56,11 @@ interface ViewDef {
   show?: boolean
 }
 
+type ProjGroup = 'pinned' | 'recent' | 'plain'
+
 // Sidebar 是常驻的层级导航：项目集（聚合层）→ 项目 → 视图。
 // “向上”只发生在点项目集节点；切项目是一步操作，且回到各项目上次停留的视图。
+// 项目可分「收藏 / 最近 / 项目」，支持拖拽排序与置顶；行尾徽标显示进行中/逾期数量。
 export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { schema, repo, reload, projectId, projects } = useApp()
   const loc = useLocation()
@@ -55,11 +71,28 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1')
   const [creating, setCreating] = useState(false)
   const [stats, setStats] = useState<Record<string, ProjectStat>>({})
-  const mem = useRef<Record<string, string>>(loadMem())
+  const [pinned, setPinned] = useState<string[]>(() => repo.pinned || [])
+  const [order, setOrder] = useState<string[]>(() => (projects || []).map((p) => p.id))
+  const [visits, setVisits] = useState<Record<string, number>>(() =>
+    loadJSON<Record<string, number>>(VISIT_KEY, {}),
+  )
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+  const mem = useRef<Record<string, string>>(loadJSON<Record<string, string>>(MEM_KEY, {}))
 
   const workspaceName = repo.project?.name || schema.workspace?.name || 'Vellum'
+  const projKey = (projects || []).map((p) => p.id).join(',')
+  const pinKey = (repo.pinned || []).join(',')
 
-  // 记录每个项目当前停留的视图。
+  // 后端顺序/收藏变化时同步到本地状态。
+  useEffect(() => {
+    setOrder((projects || []).map((p) => p.id))
+  }, [projKey])
+  useEffect(() => {
+    setPinned(repo.pinned || [])
+  }, [pinKey])
+
+  // 记录每个项目当前停留的视图，以及最近访问时间。
   useEffect(() => {
     const m = loc.pathname.match(/^\/p\/([^/]+)(\/.*)?$/)
     if (!m) return
@@ -67,14 +100,17 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     let rest = m[2] || '/'
     if (!VIEW_PATHS.has(rest)) rest = '/issues'
     mem.current[id] = rest
-    try {
-      localStorage.setItem(MEM_KEY, JSON.stringify(mem.current))
-    } catch {
-      /* ignore */
-    }
+    saveJSON(MEM_KEY, mem.current)
+    setVisits((v) => {
+      const now = Date.now()
+      if (v[id] && now - v[id] < 60_000) return v
+      const next = { ...v, [id]: now }
+      saveJSON(VISIT_KEY, next)
+      return next
+    })
   }, [loc.pathname])
 
-  // 各项目进行中数量，作为侧栏徽标。
+  // 各项目进行中/逾期数量，作为侧栏徽标。
   useEffect(() => {
     if (!multi) return
     let alive = true
@@ -129,6 +165,136 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     ({ isActive }: { isActive: boolean }) =>
       base + (isActive ? ' active' : '')
 
+  // ---- 项目分组：收藏 / 最近 / 项目 ----
+  const byId = useMemo(() => {
+    const m = new Map<string, ProjectMeta>()
+    for (const p of projects || []) m.set(p.id, p)
+    return m
+  }, [projKey])
+
+  const orderedIds = (order.length ? order : (projects || []).map((p) => p.id)).filter((id) => byId.has(id))
+  const pinnedSet = new Set(pinned)
+  const pinnedList = orderedIds.filter((id) => pinnedSet.has(id)).map((id) => byId.get(id)!)
+  const restList = orderedIds.filter((id) => !pinnedSet.has(id)).map((id) => byId.get(id)!)
+  const recentList = restList
+    .filter((p) => visits[p.id])
+    .sort((a, b) => visits[b.id] - visits[a.id])
+    .slice(0, RECENT_LIMIT)
+  const recentSet = new Set(recentList.map((p) => p.id))
+  const plainList = restList.filter((p) => !recentSet.has(p.id))
+
+  async function persist(nextPinned: string[], nextOrder: string[]) {
+    try {
+      await api.saveProjectOrder(nextPinned, nextOrder)
+      await reload()
+    } catch {
+      /* 忽略：留待下次刷新回滚 */
+    }
+  }
+
+  function togglePin(id: string) {
+    const next = pinnedSet.has(id) ? pinned.filter((x) => x !== id) : [...pinned, id]
+    setPinned(next)
+    persist(next, orderedIds)
+  }
+
+  function dropOn(targetId: string, group: 'pinned' | 'plain') {
+    const from = dragId
+    setDragId(null)
+    setOverId(null)
+    if (!from || from === targetId) return
+    const fromGroup: 'pinned' | 'plain' = pinnedSet.has(from) ? 'pinned' : 'plain'
+    if (fromGroup !== group) return
+    const next = orderedIds.slice()
+    const fi = next.indexOf(from)
+    const ti = next.indexOf(targetId)
+    if (fi < 0 || ti < 0) return
+    next.splice(fi, 1)
+    next.splice(ti, 0, from)
+    setOrder(next)
+    persist(pinned, next)
+  }
+
+  function renderProject(p: ProjectMeta, group: ProjGroup) {
+    const active = !program && p.id === projectId
+    const st = stats[p.id]
+    const doing = st?.doing ?? 0
+    const overdue = st?.overdue ?? 0
+    const isPinned = pinnedSet.has(p.id)
+    const droppable = group !== 'recent'
+    const dragOver = overId === p.id && dragId && dragId !== p.id
+    return (
+      <div key={p.id} className={'sb-proj' + (active ? ' active' : '') + (dragOver ? ' drag-over' : '')}>
+        <div
+          className="sb-proj-top"
+          draggable={droppable}
+          onDragStart={(e) => {
+            setDragId(p.id)
+            e.dataTransfer.effectAllowed = 'move'
+          }}
+          onDragOver={(e) => {
+            if (dragId && dragId !== p.id) {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setOverId(p.id)
+            }
+          }}
+          onDragLeave={() => setOverId((v) => (v === p.id ? null : v))}
+          onDrop={(e) => {
+            e.preventDefault()
+            dropOn(p.id, isPinned ? 'pinned' : 'plain')
+          }}
+          onDragEnd={() => {
+            setDragId(null)
+            setOverId(null)
+          }}
+        >
+          <Link
+            to={projectPath(p.id, mem.current[p.id] || '/')}
+            title={p.name}
+            className={'sb-proj-head' + (active ? ' active' : '')}
+          >
+            <span className="sb-proj-caret">
+              <RightOutlined />
+            </span>
+            <span className="sb-proj-avatar">{p.name.slice(0, 1)}</span>
+            <span className="sb-text sb-proj-name">{p.name}</span>
+          </Link>
+          {st && overdue > 0 ? (
+            <span className="sb-badge overdue sb-text" title={`${t('逾期')} ${overdue}`}>
+              {overdue}
+            </span>
+          ) : st && doing > 0 ? (
+            <span className="sb-badge sb-text" title={`${t('进行中')} ${doing}`}>
+              {doing}
+            </span>
+          ) : null}
+          <button
+            className={'sb-pin' + (isPinned ? ' on' : '')}
+            title={isPinned ? t('取消置顶') : t('置顶')}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              togglePin(p.id)
+            }}
+          >
+            {isPinned ? <PushpinFilled /> : <PushpinOutlined />}
+          </button>
+        </div>
+        {active && (
+          <div className="sb-sub">
+            {projectViews(p.id).map((v) => (
+              <NavLink key={v.to} to={v.to} end={v.end} title={v.label} className={cls('sb-item')}>
+                <span className="sb-ico">{v.icon}</span>
+                <span className="sb-text">{v.label}</span>
+              </NavLink>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
       <aside className={'sidebar' + (collapsed ? ' collapsed' : '')}>
@@ -146,13 +312,7 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
             {programViews
               .filter((v) => v.show !== false)
               .map((v) => (
-                <NavLink
-                  key={v.to}
-                  to={v.to}
-                  end={v.end}
-                  title={v.label}
-                  className={cls('sb-item sb-program-item')}
-                >
+                <NavLink key={v.to} to={v.to} end={v.end} title={v.label} className={cls('sb-item sb-program-item')}>
                   <span className="sb-ico">{v.icon}</span>
                   <span className="sb-text">{v.label}</span>
                 </NavLink>
@@ -161,48 +321,30 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
 
           {multi ? (
             <>
-              <div className="sb-sep">
-                <span className="sb-text">{t('项目')}</span>
-              </div>
-              <div className="sb-projects">
-                {projects.map((p) => {
-                  const active = !program && p.id === projectId
-                  const st = stats[p.id]
-                  const open = st ? Math.max(0, st.total - st.done) : 0
-                  return (
-                    <div key={p.id} className={'sb-proj' + (active ? ' active' : '')}>
-                      <Link
-                        to={projectPath(p.id, mem.current[p.id] || '/')}
-                        title={p.name}
-                        className={'sb-proj-head' + (active ? ' active' : '')}
-                      >
-                        <span className="sb-proj-caret">
-                          <RightOutlined />
-                        </span>
-                        <span className="sb-proj-avatar">{p.name.slice(0, 1)}</span>
-                        <span className="sb-text sb-proj-name">{p.name}</span>
-                        {open > 0 && <span className="sb-badge sb-text">{open}</span>}
-                      </Link>
-                      {active && (
-                        <div className="sb-sub">
-                          {projectViews(p.id).map((v) => (
-                            <NavLink
-                              key={v.to}
-                              to={v.to}
-                              end={v.end}
-                              title={v.label}
-                              className={cls('sb-item')}
-                            >
-                              <span className="sb-ico">{v.icon}</span>
-                              <span className="sb-text">{v.label}</span>
-                            </NavLink>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              {pinnedList.length > 0 && (
+                <>
+                  <div className="sb-sep">
+                    <span className="sb-text">{t('收藏')}</span>
+                  </div>
+                  <div className="sb-projects">{pinnedList.map((p) => renderProject(p, 'pinned'))}</div>
+                </>
+              )}
+              {recentList.length > 0 && (
+                <>
+                  <div className="sb-sep">
+                    <span className="sb-text">{t('最近')}</span>
+                  </div>
+                  <div className="sb-projects">{recentList.map((p) => renderProject(p, 'recent'))}</div>
+                </>
+              )}
+              {plainList.length > 0 && (
+                <>
+                  <div className="sb-sep">
+                    <span className="sb-text">{pinnedList.length || recentList.length ? t('其它') : t('项目')}</span>
+                  </div>
+                  <div className="sb-projects">{plainList.map((p) => renderProject(p, 'plain'))}</div>
+                </>
+              )}
               <button className="sb-add" onClick={() => setCreating(true)} title={t('新建项目')}>
                 <PlusOutlined /> <span className="sb-text">{t('新建项目')}</span>
               </button>

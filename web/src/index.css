@@ -722,6 +722,49 @@ body {
   flex-direction: column;
   gap: 1px;
 }
+.sb-proj-top {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-xs);
+}
+.sb-proj-top[draggable='true'] {
+  cursor: grab;
+}
+.sb-proj-top[draggable='true']:active {
+  cursor: grabbing;
+}
+.sb-proj.drag-over > .sb-proj-top {
+  box-shadow: inset 0 2px 0 var(--primary);
+  background: var(--surface-2);
+}
+.sb-pin {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  padding: 3px 5px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.sb-proj-top:hover .sb-pin {
+  opacity: 1;
+}
+.sb-pin:hover {
+  color: var(--ink);
+  background: var(--surface-3);
+}
+.sb-pin.on {
+  opacity: 1;
+  color: var(--primary);
+}
+.sidebar.collapsed .sb-pin {
+  display: none;
+}
 .sb-proj-head {
   display: flex;
   align-items: center;
@@ -732,6 +775,8 @@ body {
   text-decoration: none;
   font-size: 13.5px;
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
 }
 .sb-proj-head:hover {
   background: var(--surface-2);
@@ -787,6 +832,10 @@ body {
   background: var(--surface-3);
   color: var(--ink-soft);
   flex: 0 0 auto;
+}
+.sb-badge.overdue {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: #ef4444;
 }
 .sb-sub {
   display: flex;

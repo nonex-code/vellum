@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+
 	"github.com/nonex-code/vellum/internal/i18n"
 
 	"gopkg.in/yaml.v3"
@@ -154,12 +156,22 @@ func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 项目集管理 ----------
 
-// countIssuesLite 只解析 frontmatter 统计任务数，避免整库读取。
-func countIssuesLite(projDir string) (total, done int, latest string) {
-	doneID := map[string]bool{"done": true, "cancelled": true}
+// projectCounts 是某项目的任务概览（只解析 frontmatter，不整库读取）。
+type projectCounts struct {
+	Total   int
+	Doing   int
+	Overdue int
+	Done    int
+	Latest  string
+}
+
+// countIssuesLite 统计任务数。catOf 是「状态 id → 语义分类」，为空时回退到内置约定。
+func countIssuesLite(projDir string, catOf map[string]string) projectCounts {
+	var c projectCounts
+	today := time.Now().Format("2006-01-02")
 	ents, err := os.ReadDir(filepath.Join(projDir, "issues"))
 	if err != nil {
-		return
+		return c
 	}
 	for _, e := range ents {
 		if !e.IsDir() {
@@ -169,22 +181,57 @@ func countIssuesLite(projDir string) (total, done int, latest string) {
 		if err != nil {
 			continue
 		}
-		total++
+		c.Total++
 		fm, _ := store.SplitFrontmatter(data)
 		var head struct {
 			Status  string `yaml:"status"`
+			Due     string `yaml:"due"`
 			Updated string `yaml:"updated"`
 		}
 		if yaml.Unmarshal(fm, &head) == nil {
-			if doneID[head.Status] {
-				done++
+			cat := statusCategory(head.Status, catOf)
+			switch cat {
+			case "done":
+				c.Done++
+			case "active":
+				c.Doing++
 			}
-			if head.Updated > latest {
-				latest = head.Updated
+			if cat != "done" && isOverdue(head.Due, today) {
+				c.Overdue++
+			}
+			if head.Updated > c.Latest {
+				c.Latest = head.Updated
 			}
 		}
 	}
-	return
+	return c
+}
+
+// statusCategory 解析状态 id 的语义分类（todo|active|done）。
+func statusCategory(id string, catOf map[string]string) string {
+	if c := catOf[id]; c != "" {
+		return c
+	}
+	switch id {
+	case "done", "cancelled", "closed", "complete", "completed":
+		return "done"
+	case "doing", "in-progress", "in_progress", "active", "blocked", "review":
+		return "active"
+	default:
+		return "todo"
+	}
+}
+
+// isOverdue 截止日期早于今天即逾期（YYYY-MM-DD 可直接字符串比较）。
+func isOverdue(due, today string) bool {
+	due = strings.TrimSpace(due)
+	if due == "" {
+		return false
+	}
+	if len(due) > 10 { // 容忍带时间的 ISO 串
+		due = due[:10]
+	}
+	return due < today
 }
 
 // handleProjectStats 返回项目集下各项目概况（含归档）。
@@ -204,6 +251,8 @@ func (s *Server) handleProjectStats(w http.ResponseWriter, r *http.Request) {
 		Archived    bool   `json:"archived"`
 		Current     bool   `json:"current"`
 		Total       int    `json:"total"`
+		Doing       int    `json:"doing"`
+		Overdue     int    `json:"overdue"`
 		Done        int    `json:"done"`
 		Updated     string `json:"updated,omitempty"`
 	}
@@ -217,19 +266,68 @@ func (s *Server) handleProjectStats(w http.ResponseWriter, r *http.Request) {
 			}
 			pdir := filepath.Join(dir, e.Name())
 			meta := model.ProjectMeta{ID: e.Name(), Name: e.Name()}
-			if c, err := config.Load(pdir); err == nil && c.Project.Name != "" {
-				meta = c.Project
-				meta.ID = e.Name()
+			catOf := map[string]string{}
+			if c, err := config.Load(pdir); err == nil {
+				if c.Project.Name != "" {
+					meta = c.Project
+					meta.ID = e.Name()
+				}
+				for _, st := range c.Statuses {
+					catOf[st.ID] = st.Category
+				}
 			}
 			_, aerr := os.Stat(filepath.Join(pdir, ".archived"))
 			archived := aerr == nil
-			total, done, latest := countIssuesLite(pdir)
+			cnt := countIssuesLite(pdir, catOf)
 			out = append(out, stat{ID: meta.ID, Name: meta.Name, Description: meta.Description,
-				Archived: archived, Current: e.Name() == cur, Total: total, Done: done, Updated: latest})
+				Archived: archived, Current: e.Name() == cur, Total: cnt.Total, Doing: cnt.Doing,
+				Overdue: cnt.Overdue, Done: cnt.Done, Updated: cnt.Latest})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	po := loadProjectOrder(repoRoot)
+	pinRank, ordRank := projectRanks(po)
+	sort.SliceStable(out, func(i, j int) bool {
+		return projectLess(out[i].ID, out[j].ID, pinRank, ordRank)
+	})
 	writeJSON(w, map[string]any{"projects": out, "current": cur})
+}
+
+// handleProjectOrder 保存项目排序与收藏（置顶）。
+func (s *Server) handleProjectOrder(w http.ResponseWriter, r *http.Request) {
+	_, repoRoot, _ := s.snapshot()
+	if repoRoot == "" {
+		s.err(w, r, 400, i18n.NoRepo)
+		return
+	}
+	var in struct {
+		Pinned []string `json:"pinned"`
+		Order  []string `json:"order"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	valid := map[string]bool{}
+	for _, m := range s.projectsMeta() {
+		valid[m.ID] = true
+	}
+	clean := func(in []string) []string {
+		out := make([]string, 0, len(in))
+		seen := map[string]bool{}
+		for _, id := range in {
+			if valid[id] && !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	po := projectOrder{Pinned: clean(in.Pinned), Order: clean(in.Order)}
+	if err := saveProjectOrder(repoRoot, po); err != nil {
+		s.errOf(w, r, 500, err)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "pinned": po.Pinned, "order": po.Order})
 }
 
 // handleRenameProject 修改项目显示名/简介（写 projects/<id>/workbench.yaml）。
@@ -446,7 +544,7 @@ func (s *Server) convertModeLocked(mode string) (string, error) {
 			if _, err := os.Stat(filepath.Join(pdir, ".archived")); err != nil {
 				continue
 			}
-			if total, _, _ := countIssuesLite(pdir); total > 0 {
+			if total := countIssuesLite(pdir, nil).Total; total > 0 {
 				return "", i18n.New(i18n.ArchivedProjectHasIssues, id, total)
 			}
 		}
