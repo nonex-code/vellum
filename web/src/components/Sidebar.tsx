@@ -56,7 +56,7 @@ interface ViewDef {
   show?: boolean
 }
 
-type ProjGroup = 'pinned' | 'recent' | 'plain'
+type ProjGroup = 'pinned' | 'plain'
 
 // Sidebar 是常驻的层级导航：项目集（聚合层）→ 项目 → 视图。
 // “向上”只发生在点项目集节点；切项目是一步操作，且回到各项目上次停留的视图。
@@ -176,12 +176,14 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
   const pinnedSet = new Set(pinned)
   const pinnedList = orderedIds.filter((id) => pinnedSet.has(id)).map((id) => byId.get(id)!)
   const restList = orderedIds.filter((id) => !pinnedSet.has(id)).map((id) => byId.get(id)!)
-  const recentList = restList
-    .filter((p) => visits[p.id])
-    .sort((a, b) => visits[b.id] - visits[a.id])
-    .slice(0, RECENT_LIMIT)
-  const recentSet = new Set(recentList.map((p) => p.id))
-  const plainList = restList.filter((p) => !recentSet.has(p.id))
+  // “最近访问”只做行内标记，不再把项目搬位置，保持列表顺序稳定。
+  const recentSet = new Set(
+    restList
+      .filter((p) => visits[p.id])
+      .sort((a, b) => visits[b.id] - visits[a.id])
+      .slice(0, RECENT_LIMIT)
+      .map((p) => p.id),
+  )
 
   async function persist(nextPinned: string[], nextOrder: string[]) {
     try {
@@ -221,13 +223,12 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     const doing = st?.doing ?? 0
     const overdue = st?.overdue ?? 0
     const isPinned = pinnedSet.has(p.id)
-    const droppable = group !== 'recent'
     const dragOver = overId === p.id && dragId && dragId !== p.id
     return (
       <div key={p.id} className={'sb-proj' + (active ? ' active' : '') + (dragOver ? ' drag-over' : '')}>
         <div
           className="sb-proj-top"
-          draggable={droppable}
+          draggable
           onDragStart={(e) => {
             setDragId(p.id)
             e.dataTransfer.effectAllowed = 'move'
@@ -260,6 +261,7 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
             <span className="sb-proj-avatar">{p.name.slice(0, 1)}</span>
             <span className="sb-text sb-proj-name">{p.name}</span>
           </Link>
+          {!isPinned && recentSet.has(p.id) && <span className="sb-recent-dot" title={t('最近')} />}
           {st && overdue > 0 ? (
             <span className="sb-badge overdue sb-text" title={`${t('逾期')} ${overdue}`}>
               {overdue}
@@ -329,20 +331,12 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
                   <div className="sb-projects">{pinnedList.map((p) => renderProject(p, 'pinned'))}</div>
                 </>
               )}
-              {recentList.length > 0 && (
+              {restList.length > 0 && (
                 <>
                   <div className="sb-sep">
-                    <span className="sb-text">{t('最近')}</span>
+                    <span className="sb-text">{pinnedList.length ? t('全部项目') : t('项目')}</span>
                   </div>
-                  <div className="sb-projects">{recentList.map((p) => renderProject(p, 'recent'))}</div>
-                </>
-              )}
-              {plainList.length > 0 && (
-                <>
-                  <div className="sb-sep">
-                    <span className="sb-text">{pinnedList.length || recentList.length ? t('其它') : t('项目')}</span>
-                  </div>
-                  <div className="sb-projects">{plainList.map((p) => renderProject(p, 'plain'))}</div>
+                  <div className="sb-projects">{restList.map((p) => renderProject(p, 'plain'))}</div>
                 </>
               )}
               <button className="sb-add" onClick={() => setCreating(true)} title={t('新建项目')}>

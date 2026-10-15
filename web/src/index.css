@@ -837,6 +837,18 @@ body {
   background: color-mix(in srgb, #ef4444 18%, transparent);
   color: #ef4444;
 }
+.sb-recent-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+  opacity: 0.55;
+  margin: 0 3px;
+}
+.sidebar.collapsed .sb-recent-dot {
+  display: none;
+}
 .sb-sub {
   display: flex;
   flex-direction: column;

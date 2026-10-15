@@ -28,7 +28,6 @@ export const chrome: Record<string, string> = {
   // 侧边导航（Sidebar.tsx）
   '收藏': 'Favorites',
   '最近': 'Recent',
-  '其它': 'Others',
   '置顶': 'Pin to top',
   '取消置顶': 'Unpin',
   '逾期': 'Overdue',
