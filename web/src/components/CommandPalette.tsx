@@ -5,6 +5,7 @@ import {
   PlusOutlined,
   ProjectOutlined,
   SearchOutlined,
+  SettingOutlined,
   SyncOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
@@ -12,7 +13,7 @@ import {
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { ROOT_PID, projectPath, useGo } from '../nav'
+import { ROOT_PID, projectAggPath, projectPath, useGo } from '../nav'
 import { openPalette } from '../bus'
 import type { Issue, SearchHit } from '../types'
 import { StatusTag } from './tags'
@@ -77,17 +78,20 @@ export default function CommandPalette({
       nav(to)
     }
     const list: Item[] = []
-    // 项目集作用域下没有可写的项目：新建/文档/设置仍属具体项目，不在此列出。
+    // program 是聚合视图：视图类动作要带上 include=children，否则会退化成只看根项目。
+    const vgo = (to: string) => go(program ? projectAggPath(ROOT_PID, to) : to)
+    // 聚合视图下没有唯一可写项目，新建任务不在此列出。
     if (!program)
       list.push({ key: 'new', kind: 'action', icon: <PlusOutlined />, label: t('新建任务'), hint: 'N', onRun: go('/new') })
     list.push({ key: 'home', kind: 'action', icon: <HomeOutlined />, label: t('前往首页'), onRun: go('/') })
-    list.push({ key: 'issues', kind: 'action', icon: <UnorderedListOutlined />, label: t('任务列表'), onRun: go('/issues') })
-    if (schema.modules.board) list.push({ key: 'board', kind: 'action', icon: <ProjectOutlined />, label: t('看板'), onRun: go('/board') })
-    if (schema.modules.gantt) list.push({ key: 'gantt', kind: 'action', icon: <ProjectOutlined />, label: t('甘特图'), onRun: go('/gantt') })
+    list.push({ key: 'issues', kind: 'action', icon: <UnorderedListOutlined />, label: t('任务列表'), onRun: vgo('/issues') })
+    if (schema.modules.board) list.push({ key: 'board', kind: 'action', icon: <ProjectOutlined />, label: t('看板'), onRun: vgo('/board') })
+    if (schema.modules.gantt) list.push({ key: 'gantt', kind: 'action', icon: <ProjectOutlined />, label: t('甘特图'), onRun: vgo('/gantt') })
     if (schema.modules.docs && !program) list.push({ key: 'docs', kind: 'action', icon: <SearchOutlined />, label: t('文档'), onRun: go('/docs') })
     list.push({ key: 'projects', kind: 'action', icon: <HomeOutlined />, label: repo.mode === 'multi' ? t('项目集总览') : t('转为项目集'), onRun: go(projectPath(ROOT_PID, '/')) })
-    if (!program) list.push({ key: 'settings', kind: 'action', icon: <UnorderedListOutlined />, label: t('设置'), onRun: go('/settings') })
-    if (schema.modules.search) list.push({ key: 'search', kind: 'action', icon: <SearchOutlined />, label: t('搜索'), onRun: go('/search') })
+    // 设置是全局入口，其职责由当前项目上下文决定（根项目=仓库级，子项目=项目级）。
+    list.push({ key: 'settings', kind: 'action', icon: <SettingOutlined />, label: program ? t('项目集设置') : t('项目设置'), onRun: go('/settings') })
+    if (schema.modules.search) list.push({ key: 'search', kind: 'action', icon: <SearchOutlined />, label: t('搜索'), onRun: vgo('/search') })
     if (repo.hasRemote)
       list.push({
         key: 'sync',

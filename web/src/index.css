@@ -1182,6 +1182,11 @@ body {
   color: var(--primary);
   background: var(--primary-weak);
 }
+.nav-ghost.on {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-weak);
+}
 
 /* ---------- 首页 ---------- */
 .home-head {

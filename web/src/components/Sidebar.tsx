@@ -13,7 +13,6 @@ import {
   PushpinOutlined,
   RightOutlined,
   SearchOutlined,
-  SettingOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
 
@@ -147,7 +146,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
       { to: projectPath(id, '/gantt'), label: t('甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
       { to: projectPath(id, '/docs'), label: t('文档'), icon: <BookOutlined />, show: schema.modules.docs },
       { to: projectPath(id, '/search'), label: t('搜索'), icon: <SearchOutlined />, show: schema.modules.search },
-      { to: projectPath(id, '/settings'), label: t('设置'), icon: <SettingOutlined /> },
     ]
     return all.filter((v) => v.show !== false)
   }
@@ -160,7 +158,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
         { to: projectAggPath(ROOT_PID, '/board'), label: t('全部看板'), icon: <ProjectOutlined />, show: schema.modules.board },
         { to: projectAggPath(ROOT_PID, '/gantt'), label: t('全部甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
         { to: projectAggPath(ROOT_PID, '/search'), label: t('全部搜索'), icon: <SearchOutlined />, show: schema.modules.search },
-        { to: projectPath(ROOT_PID, '/settings'), label: t('设置'), icon: <SettingOutlined /> },
       ]
     : [
         { to: projectPath(ROOT_PID, '/'), label: t('首页'), icon: <HomeOutlined />, end: true },

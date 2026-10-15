@@ -18,14 +18,16 @@ import {
   FolderOpenOutlined,
   LinkOutlined,
   PlusOutlined,
+  SettingOutlined,
   SyncOutlined,
 } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { useThemeCtx } from '../theme-context'
 import { t, useLang } from '../i18n'
+import { useGo } from '../nav'
 import type { RepoMeta } from '../types'
 
 function ThemeToggle() {
@@ -84,6 +86,8 @@ function shortPath(p: string): string {
 export default function TopBar() {
   const { schema, repo, reload } = useApp()
   const nav = useNavigate()
+  const go = useGo()
+  const loc = useLocation()
   const { message } = AntApp.useApp()
   const [syncing, setSyncing] = useState(false)
   const [remoteOpen, setRemoteOpen] = useState(false)
@@ -107,6 +111,8 @@ export default function TopBar() {
   }, [repo?.loaded, repo?.root])
 
   const currentName = repos.find((r) => r.path === repo.root)?.name || name
+  // 设置是全局入口（顶栏齿轮）；其职责仍由当前项目上下文决定（根项目=仓库级，子项目=项目级）。
+  const onSettings = loc.pathname.replace(/^\/p\/[^/]+/, '').startsWith('/settings')
 
   async function refreshRepos() {
     try {
@@ -258,6 +264,15 @@ export default function TopBar() {
             {currentName} <DownOutlined style={{ fontSize: 10 }} />
           </Button>
         </Dropdown>
+        <button
+          className={'nav-ghost' + (onSettings ? ' on' : '')}
+          onClick={() => go('/settings')}
+          title={t('设置')}
+          aria-label={t('设置')}
+          style={{ padding: '5px 9px' }}
+        >
+          <SettingOutlined />
+        </button>
         <ThemeToggle />
         <LangToggle />
         {hasRemote ? (
