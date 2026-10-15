@@ -7,6 +7,7 @@ import {
   FileImageOutlined,
   ItalicOutlined,
   LinkOutlined,
+  NodeIndexOutlined,
   OrderedListOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
@@ -80,6 +81,27 @@ export default function MarkdownEditor({
     })
   }
 
+  // 在光标处插入一整块文本（代码块/图表），必要时前面补空行。
+  function insertBlock(text: string) {
+    const el = ref.current
+    if (!el) {
+      emit(value + (value && !value.endsWith('\n') ? '\n\n' : '') + text)
+      return
+    }
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    const before = value.slice(0, start)
+    const after = value.slice(end)
+    const pad = before && !before.endsWith('\n') ? '\n\n' : ''
+    const insert = pad + text
+    emit(before + insert + after)
+    requestAnimationFrame(() => {
+      el.focus()
+      const caret = (before + insert).length
+      el.setSelectionRange(caret, caret)
+    })
+  }
+
   // title 是工具栏提示；placeholderText 是点按钮时插入的占位样例，跟随界面语言（用户会覆写它）。
   const tools: { key: string; title: string; icon: React.ReactNode; run: () => void }[] = [
     { key: 'h1', title: t('一级标题'), icon: 'H1', run: () => prefixLines(() => '# ') },
@@ -107,6 +129,12 @@ export default function MarkdownEditor({
       title: t('图片'),
       icon: <FileImageOutlined />,
       run: () => surround('![', t('](图片URL)'), t('描述')),
+    },
+    {
+      key: 'mermaid',
+      title: t('Mermaid 图表'),
+      icon: <NodeIndexOutlined />,
+      run: () => insertBlock(t('```mermaid\ngraph TD\n  A[开始] --> B[结束]\n```\n')),
     },
   ]
 

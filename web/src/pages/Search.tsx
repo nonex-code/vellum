@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { App as AntApp, Empty, Input, List, Space, Tag } from 'antd'
-import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope, projectPath, useGo } from '../nav'
 import type { SearchHit } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
@@ -30,8 +30,9 @@ function highlight(text: string, q: string) {
 }
 
 export default function Search() {
-  const nav = useNavigate()
-  const { schema } = useApp()
+  const nav = useGo()
+  const { schema, projectId } = useApp()
+  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -76,7 +77,10 @@ export default function Search() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-kicker">{t('全文检索')}</div>
+          <div className="page-kicker">
+            {t('全文检索')}
+            {program && ` · ${t('全部项目')}`}
+          </div>
           <h1 className="page-title">{t('搜索')}</h1>
         </div>
       </div>
@@ -119,10 +123,15 @@ export default function Search() {
           <List.Item
             className="search-item"
             style={{ cursor: 'pointer', alignItems: 'flex-start' }}
-            onClick={() => nav(`/issue/${h.issue.id}`)}
+            onClick={() =>
+              program
+                ? nav(projectPath(h.issue.project || '', `/issue/${h.issue.id}`))
+                : nav(`/issue/${h.issue.id}`)
+            }
           >
             <div style={{ width: '100%' }}>
               <Space size={12} wrap style={{ marginBottom: 4 }}>
+                {program && <Tag className="project-tag">{h.issue.project}</Tag>}
                 <span className="stamp">{h.issue.id}</span>
                 <StatusTag id={h.issue.status} />
                 <PriorityText id={h.issue.priority} />

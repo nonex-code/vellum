@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { App as AntApp, Button, Empty, Segmented, Skeleton, Tooltip } from 'antd'
 import { AimOutlined, ReloadOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useGo } from '../nav'
 import dayjs from 'dayjs'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { intlLocale, t } from '../i18n'
+import { isProgramScope, projectPath } from '../nav'
 import type { GanttGroup, GanttItem } from '../types'
 
 type Zoom = 'week' | 'month'
@@ -79,8 +80,9 @@ const CSS = `
 `
 
 export default function Gantt() {
-  const { schema } = useApp()
-  const nav = useNavigate()
+  const { schema, projectId } = useApp()
+  const nav = useGo()
+  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [groups, setGroups] = useState<GanttGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -208,8 +210,9 @@ export default function Gantt() {
     )
   }
 
-  function goIssue(id: string) {
-    nav(`/issue/${id}`)
+  function goIssue(it: GanttItem) {
+    if (program) nav(projectPath(it.project || '', `/issue/${it.id}`))
+    else nav(`/issue/${it.id}`)
   }
 
   function renderItemBar(it: GanttItem): ReactNode {
@@ -232,7 +235,7 @@ export default function Gantt() {
               opacity: op,
               boxShadow: overdue ? '0 0 0 2px var(--accent)' : undefined,
             }}
-            onClick={() => goIssue(it.id)}
+            onClick={() => goIssue(it)}
           >
             {w >= 92 && (
               <span className="wb-g-bar-label">
@@ -256,7 +259,7 @@ export default function Gantt() {
               opacity: op,
               boxShadow: overdue ? '0 0 0 2px var(--accent)' : undefined,
             }}
-            onClick={() => goIssue(it.id)}
+            onClick={() => goIssue(it)}
           />
         </Tooltip>
       )
@@ -276,7 +279,7 @@ export default function Gantt() {
               opacity: op,
               border: '1.5px dashed color-mix(in srgb, var(--surface) 72%, transparent)',
             }}
-            onClick={() => goIssue(it.id)}
+            onClick={() => goIssue(it)}
           >
             {w >= 92 && <span className="wb-g-bar-label">{t('{date} 起', { date: s.format('M.D') })}</span>}
           </div>
@@ -354,8 +357,9 @@ export default function Gantt() {
         <div>
           <div className="page-kicker">
             {t('{groups} 个分组 · {items} 个任务', { groups: ordered.length, items: totalItems })}
+            {program && ` · ${t('全部项目')}`}
           </div>
-          <h1 className="page-title">{t('甘特图')}</h1>
+          <h1 className="page-title">{program ? t('全部任务甘特图') : t('甘特图')}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Segmented
@@ -511,15 +515,17 @@ export default function Gantt() {
                       for (const it of g.items) {
                         const ii = idx++
                         rows.push(
-                          <div key={`i-${it.id}`} className="wb-g-row" onMouseEnter={() => setHover(ii)}>
+                          <div key={`i-${it.project || ''}:${it.id}`} className="wb-g-row" onMouseEnter={() => setHover(ii)}>
                             <div className="wb-g-left">
-                              <span className="stamp" style={{ cursor: 'pointer' }} onClick={() => goIssue(it.id)}>
+                              {program && <span className="wb-g-dot" style={{ background: 'var(--border-strong)' }} />}
+                              <span className="stamp" style={{ cursor: 'pointer' }} onClick={() => goIssue(it)}>
                                 {it.id}
                               </span>
                               <span
                                 className={`wb-g-title${it.done ? ' is-done' : ''}`}
-                                onClick={() => goIssue(it.id)}
+                                onClick={() => goIssue(it)}
                               >
+                                {program && <span className="mono">{it.project} · </span>}
                                 {it.title}
                               </span>
                             </div>

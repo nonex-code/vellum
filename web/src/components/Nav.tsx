@@ -1,4 +1,4 @@
-import { App as AntApp, Button, Input, Modal, Select, Typography } from 'antd'
+import { App as AntApp, Button, Select } from 'antd'
 import {
   ApartmentOutlined,
   BarsOutlined,
@@ -11,91 +11,75 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons'
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope, parseProjectId, projectPath } from '../nav'
+import NewProjectModal from './NewProjectModal'
 
 export default function Nav({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { schema, repo, reload } = useApp()
+  const { schema, repo, reload, projectId, projects } = useApp()
   const nav = useNavigate()
+  const loc = useLocation()
   const { message } = AntApp.useApp()
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [desc, setDesc] = useState('')
-  const [saving, setSaving] = useState(false)
 
-  const multi = schema.workspace?.mode === 'multi'
-  const projects = repo.projects || []
+  const multi = repo.mode === 'multi'
+  const program = isProgramScope(projectId)
+
+  // 切换项目时保留当前视图类型（看板→看板、甘特→甘特），不再一律回首页。
+  function restPath(): string {
+    const m = loc.pathname.match(/^\/p\/[^/]+(\/.*)?$/)
+    return m?.[1] || '/'
+  }
 
   async function switchProject(id: string) {
+    if (id === projectId && !program) return
     try {
       await api.selectProject(id)
+      const target = program ? '/' : restPath()
+      nav(projectPath(id, target))
       await reload()
-      nav('/')
     } catch (e) {
       message.error((e as Error).message)
     }
   }
 
-  async function create() {
-    if (!name.trim()) {
-      message.warning(t('请输入项目名称'))
-      return
-    }
-    setSaving(true)
-    try {
-      await api.createProject({ name: name.trim(), description: desc.trim() })
-      await reload()
-      setCreating(false)
-      setName('')
-      setDesc('')
-      message.success(t('项目已创建'))
-      nav('/')
-    } catch (e) {
-      message.error((e as Error).message)
-    } finally {
-      setSaving(false)
-    }
-  }
+  // 项目级导航链接。
+  const link = (to: string, label: string, icon: React.ReactNode, end = false) => (
+    <NavLink to={projectPath(projectId, to)} end={end} title={label}>
+      {icon} <span className="nav-text">{label}</span>
+    </NavLink>
+  )
 
   return (
     <div className="navbar">
       <nav className="navlinks">
-        <NavLink to="/" end title={t('首页')}>
-          <HomeOutlined /> <span className="nav-text">{t('首页')}</span>
-        </NavLink>
-        <NavLink to="/issues" title={t('任务列表')}>
-          <UnorderedListOutlined /> <span className="nav-text">{t('任务')}</span>
-        </NavLink>
-        {schema.modules.board && (
-          <NavLink to="/board" title={t('看板')}>
-            <ProjectOutlined /> <span className="nav-text">{t('看板')}</span>
-          </NavLink>
+        {program ? (
+          <>
+            {link('/', t('项目集总览'), <ApartmentOutlined />, true)}
+            {link('/issues', t('全部任务'), <UnorderedListOutlined />)}
+            {schema.modules.board && link('/board', t('看板'), <ProjectOutlined />)}
+            {schema.modules.gantt && link('/gantt', t('甘特'), <BarsOutlined />)}
+            {schema.modules.search && link('/search', t('搜索'), <SearchOutlined />)}
+          </>
+        ) : (
+          <>
+            {link('/', t('首页'), <HomeOutlined />, true)}
+            {link('/issues', t('任务'), <UnorderedListOutlined />)}
+            {schema.modules.board && link('/board', t('看板'), <ProjectOutlined />)}
+            {schema.modules.gantt && link('/gantt', t('甘特'), <BarsOutlined />)}
+            {schema.modules.docs && link('/docs', t('文档'), <BookOutlined />)}
+            {schema.modules.search && link('/search', t('搜索'), <SearchOutlined />)}
+            <NavLink to="/programs" title={multi ? t('项目集总览') : t('转为项目集')}>
+              <ApartmentOutlined />{' '}
+              <span className="nav-text">{multi ? t('项目集') : t('项目集')}</span>
+            </NavLink>
+            {link('/settings', t('设置'), <SettingOutlined />)}
+          </>
         )}
-        {schema.modules.gantt && (
-          <NavLink to="/gantt" title={t('甘特图')}>
-            <BarsOutlined /> <span className="nav-text">{t('甘特')}</span>
-          </NavLink>
-        )}
-        {schema.modules.docs && (
-          <NavLink to="/docs" title={t('文档')}>
-            <BookOutlined /> <span className="nav-text">{t('文档')}</span>
-          </NavLink>
-        )}
-        {schema.modules.search && (
-          <NavLink to="/search" title={t('搜索')}>
-            <SearchOutlined /> <span className="nav-text">{t('搜索')}</span>
-          </NavLink>
-        )}
-        <NavLink to="/projects" title={multi ? t('项目集管理') : t('组织形式')}>
-          <ApartmentOutlined />{' '}
-          <span className="nav-text">{multi ? t('项目集') : t('组织形式')}</span>
-        </NavLink>
-        <NavLink to="/settings" title={t('配置中心')}>
-          <SettingOutlined /> <span className="nav-text">{t('设置')}</span>
-        </NavLink>
       </nav>
 
       <div className="nav-right">
@@ -108,8 +92,9 @@ export default function Nav({ onOpenPalette }: { onOpenPalette: () => void }) {
             <span className="nav-label nav-text">{t('项目')}</span>
             <Select
               size="small"
-              value={repo.currentProject}
+              value={program ? repo.currentProject : parseProjectId(loc.pathname) || undefined}
               style={{ minWidth: 130, maxWidth: 180 }}
+              placeholder={t('选择项目')}
               onChange={switchProject}
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
             />
@@ -120,34 +105,14 @@ export default function Nav({ onOpenPalette }: { onOpenPalette: () => void }) {
         )}
       </div>
 
-      <Modal
-        title={t('新建项目')}
+      <NewProjectModal
         open={creating}
-        onOk={create}
-        confirmLoading={saving}
-        okText={t('创建')}
-        cancelText={t('取消')}
-        onCancel={() => setCreating(false)}
-      >
-        <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
-          {t('项目存放在当前工作台仓库的')} <span className="mono">projects/</span>{' '}
-          {t('下，各自独立编号、互不干扰。')}
-        </Typography.Paragraph>
-        <Input
-          size="large"
-          placeholder={t('项目名称')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onPressEnter={create}
-          style={{ marginBottom: 12 }}
-        />
-        <Input
-          placeholder={t('简介（可选）')}
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          onPressEnter={create}
-        />
-      </Modal>
+        onClose={() => setCreating(false)}
+        onCreated={async (id) => {
+          await reload()
+          if (id) nav(projectPath(id, '/'))
+        }}
+      />
     </div>
   )
 }

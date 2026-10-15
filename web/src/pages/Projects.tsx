@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   App as AntApp,
   Button,
   Card,
   Col,
+  Dropdown,
   Empty,
   Form,
   Input,
@@ -16,23 +17,27 @@ import {
   Typography,
   theme,
 } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   AppstoreOutlined,
-  CheckOutlined,
   EditOutlined,
   FolderAddOutlined,
   InboxOutlined,
   MergeCellsOutlined,
+  MoreOutlined,
   RestOutlined,
-  SwapOutlined,
+  RightOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import type { ProjectStat } from '../types'
+import { projectPath } from '../nav'
+import type { Issue, ProjectStat } from '../types'
 import { fromNow } from '../util'
+import { StatusTag } from '../components/tags'
+import NewProjectModal from '../components/NewProjectModal'
 
 export default function Projects() {
   const { schema, repo, reload } = useApp()
@@ -40,6 +45,7 @@ export default function Projects() {
   const { message } = AntApp.useApp()
   const { token } = theme.useToken()
   const [stats, setStats] = useState<ProjectStat[]>([])
+  const [focus, setFocus] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<ProjectStat | null>(null)
   const [creating, setCreating] = useState(false)
@@ -56,19 +62,22 @@ export default function Projects() {
     }
   }, [message])
 
+  // 跨项目聚合的近期任务（program 作用域下请求头是 "*"）。
+  const loadFocus = useCallback(async () => {
+    if (repo.mode !== 'multi') return
+    try {
+      const r = await api.listIssues()
+      const list = [...(r.issues || [])].sort((a, b) => (a.updated < b.updated ? 1 : -1))
+      setFocus(list.slice(0, 6))
+    } catch {
+      /* 忽略聚合失败，页面主体仍可用 */
+    }
+  }, [repo.mode])
+
   useEffect(() => {
     load()
-  }, [load])
-
-  async function switchTo(id: string) {
-    try {
-      await api.selectProject(id)
-      await reload()
-      nav('/')
-    } catch (e) {
-      message.error((e as Error).message)
-    }
-  }
+    loadFocus()
+  }, [load, loadFocus])
 
   async function setArchived(p: ProjectStat, archived: boolean) {
     try {
@@ -102,8 +111,8 @@ export default function Projects() {
     try {
       await api.switchMode('single')
       await reload()
+      nav(projectPath('default', '/'))
       message.success(t('已合并回单项目'))
-      nav('/')
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -151,58 +160,42 @@ export default function Projects() {
   const totalTasks = stats.reduce((n, p) => n + p.total, 0)
   const doneTasks = stats.reduce((n, p) => n + p.done, 0)
 
+  const menuFor = (p: ProjectStat): MenuProps => ({
+    items: [
+      { key: 'edit', icon: <EditOutlined />, label: t('重命名') },
+      ...(p.archived
+        ? [{ key: 'restore', icon: <RestOutlined />, label: t('取消归档') }]
+        : [{ key: 'archive', icon: <InboxOutlined />, label: t('归档'), danger: true }]),
+    ],
+    onClick: ({ key, domEvent }) => {
+      domEvent.stopPropagation()
+      if (key === 'edit') setEditing(p)
+      if (key === 'restore') setArchived(p, false)
+      if (key === 'archive') {
+        if (p.current) {
+          message.warning(t('不能归档当前活动项目，请先切换到其他项目。'))
+          return
+        }
+        Modal.confirm({
+          title: t('归档「{name}」？', { name: p.name }),
+          content: t('归档后从项目列表隐藏，任务数据保留，可随时取消归档。'),
+          okText: t('归档'),
+          cancelText: t('取消'),
+          okButtonProps: { danger: true },
+          onOk: () => setArchived(p, true),
+        })
+      }
+    },
+  })
+
   const card = (p: ProjectStat) => {
     const percent = p.total ? Math.round((p.done / p.total) * 100) : 0
-    const actions = p.archived
-      ? [
-          <Popconfirm
-            key="restore"
-            title={t('取消归档该项目？')}
-            description={t('项目将重新出现在项目列表中。')}
-            okText={t('取消归档')}
-            cancelText={t('保留归档')}
-            onConfirm={() => setArchived(p, false)}
-          >
-            <span>
-              <RestOutlined /> {t('取消归档')}
-            </span>
-          </Popconfirm>,
-        ]
-      : [
-          p.current ? (
-            <span key="cur" style={{ color: 'var(--ink-faint)' }}>
-              <CheckOutlined /> {t('当前')}
-            </span>
-          ) : (
-            <span key="switch" onClick={() => switchTo(p.id)}>
-              <SwapOutlined /> {t('切换')}
-            </span>
-          ),
-          <span key="edit" onClick={() => setEditing(p)}>
-            <EditOutlined /> {t('重命名')}
-          </span>,
-          <Popconfirm
-            key="archive"
-            title={t('归档「{name}」？', { name: p.name })}
-            description={
-              p.current
-                ? t('不能归档当前活动项目，请先切换到其他项目。')
-                : t('归档后从项目列表隐藏，任务数据保留，可随时取消归档。')
-            }
-            okText={t('归档')}
-            cancelText={t('取消')}
-            okButtonProps={{ disabled: p.current }}
-            onConfirm={() => setArchived(p, true)}
-          >
-            <span>
-              <InboxOutlined /> {t('归档')}
-            </span>
-          </Popconfirm>,
-        ]
     return (
       <Card
         className="rise"
-        style={{ height: '100%', opacity: p.archived ? 0.55 : 1 }}
+        hoverable
+        style={{ height: '100%', opacity: p.archived ? 0.6 : 1 }}
+        onClick={() => nav(projectPath(p.id, '/'))}
         title={
           <span>
             {p.name}
@@ -213,13 +206,28 @@ export default function Projects() {
             )}
           </span>
         }
-        actions={actions}
+        extra={
+          <Dropdown menu={menuFor(p)} trigger={['click']} placement="bottomRight">
+            <Button
+              type="text"
+              size="small"
+              icon={<MoreOutlined />}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Dropdown>
+        }
       >
         <div className="mono" style={{ marginBottom: 10 }}>{p.id}</div>
-        <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ minHeight: 44, marginBottom: 12 }}>
+        <Typography.Paragraph
+          type="secondary"
+          ellipsis={{ rows: 2 }}
+          style={{ minHeight: 44, marginBottom: 12 }}
+        >
           {p.description || t('暂无简介')}
         </Typography.Paragraph>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <div
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}
+        >
           <span style={{ fontSize: 13 }}>
             {t('任务')} <span className="mono">{p.done}/{p.total}</span>
           </span>
@@ -231,6 +239,9 @@ export default function Projects() {
           showInfo={false}
           strokeColor={p.total > 0 && p.done === p.total ? token.colorSuccess : token.colorPrimary}
         />
+        <div style={{ marginTop: 14, color: 'var(--primary)', fontWeight: 500 }}>
+          {t('进入项目')} <RightOutlined style={{ fontSize: 11 }} />
+        </div>
       </Card>
     )
   }
@@ -239,7 +250,7 @@ export default function Projects() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-kicker">vellum / {t('项目集')}</div>
+          <div className="page-kicker">vellum / {t('项目集总览')}</div>
           <h1 className="page-title">{schema.workspace.name}</h1>
           <Typography.Paragraph type="secondary" style={{ margin: '8px 0 0', maxWidth: 640 }}>
             {t('一个仓库即一个项目集：任务存放在')} <span className="mono">projects/&lt;id&gt;/</span>{' '}
@@ -317,33 +328,50 @@ export default function Projects() {
         </>
       )}
 
-      {creating && (
-        <ProjectModal
-          title={t('新建项目')}
-          okText={t('创建')}
-          hint={
-            <>
-              {t('项目存放在当前工作台仓库的')} <span className="mono">projects/</span> {t('下，各自独立编号、互不干扰。')}
-            </>
-          }
-          onClose={() => setCreating(false)}
-          onSubmit={async (v) => {
-            await api.createProject(v)
-            await Promise.all([reload(), load()])
-            message.success(t('项目已创建'))
-            setCreating(false)
-          }}
-        />
+      {focus.length > 0 && (
+        <>
+          <div className="page-header" style={{ marginTop: 36, marginBottom: 12 }}>
+            <div className="form-section" style={{ margin: 0 }}>
+              {t('跨项目动态')}
+            </div>
+            <Button type="link" onClick={() => nav('/programs/issues')}>
+              {t('查看全部任务')} <RightOutlined style={{ fontSize: 11 }} />
+            </Button>
+          </div>
+          <div className="wb-focus">
+            {focus.map((i) => (
+              <div
+                key={`${i.project}-${i.id}`}
+                className="wb-focus-row"
+                onClick={() => nav(projectPath(i.project || '', `/issue/${i.id}`))}
+              >
+                <Tag className="project-tag">{i.project}</Tag>
+                <span className="stamp">{i.id}</span>
+                <span className="wb-focus-title">{i.title}</span>
+                <StatusTag id={i.status} />
+                <span className="mono" style={{ color: 'var(--ink-faint)' }}>
+                  {fromNow(i.updated)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
+      <NewProjectModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={async (id) => {
+          await Promise.all([reload(), load()])
+          if (id) nav(projectPath(id, '/'))
+        }}
+      />
+
       {editing && (
-        <ProjectModal
-          title={t('重命名「{name}」', { name: editing.name })}
-          okText={t('保存')}
-          initial={{ name: editing.name, description: editing.description }}
+        <RenameModal
+          project={editing}
           onClose={() => setEditing(null)}
-          onSubmit={async (v) => {
-            await api.renameProject(editing.id, v)
+          onSaved={async () => {
             await Promise.all([reload(), load()])
             message.success(t('项目信息已更新'))
             setEditing(null)
@@ -354,20 +382,14 @@ export default function Projects() {
   )
 }
 
-function ProjectModal({
-  title,
-  okText,
-  hint,
-  initial,
-  onSubmit,
+function RenameModal({
+  project,
   onClose,
+  onSaved,
 }: {
-  title: string
-  okText: string
-  hint?: ReactNode
-  initial?: { name: string; description?: string }
-  onSubmit: (v: { name: string; description: string }) => Promise<void>
+  project: ProjectStat
   onClose: () => void
+  onSaved: () => void | Promise<void>
 }) {
   const { message } = AntApp.useApp()
   const [form] = Form.useForm()
@@ -378,7 +400,11 @@ function ProjectModal({
     if (!v) return
     setSaving(true)
     try {
-      await onSubmit({ name: (v.name as string).trim(), description: ((v.description as string) || '').trim() })
+      await api.renameProject(project.id, {
+        name: (v.name as string).trim(),
+        description: ((v.description as string) || '').trim(),
+      })
+      await onSaved()
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -388,29 +414,28 @@ function ProjectModal({
 
   return (
     <Modal
-      title={title}
+      title={t('重命名「{name}」', { name: project.name })}
       open
       onCancel={onClose}
       onOk={finish}
-      okText={okText}
+      okText={t('保存')}
       cancelText={t('取消')}
       confirmLoading={saving}
     >
-      {hint && (
-        <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
-          {hint}
-        </Typography.Paragraph>
-      )}
-      <Form form={form} layout="vertical" initialValues={initial}>
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ name: project.name, description: project.description }}
+      >
         <Form.Item
           name="name"
           label={t('项目名称')}
           rules={[{ required: true, whitespace: true, message: t('请输入项目名称') }]}
         >
-          <Input autoFocus placeholder={t('例如：客户官网改版')} />
+          <Input autoFocus />
         </Form.Item>
         <Form.Item name="description" label={t('简介（可选）')}>
-          <Input.TextArea rows={2} placeholder={t('一句话说明这个项目在做什么')} />
+          <Input.TextArea rows={2} />
         </Form.Item>
       </Form>
     </Modal>

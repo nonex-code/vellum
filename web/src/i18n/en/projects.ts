@@ -40,4 +40,7 @@ export const projects: Record<string, string> = {
   '项目信息已更新': 'Project details updated',
   '例如：客户官网改版': 'e.g. Client website redesign',
   '一句话说明这个项目在做什么': 'One line on what this project is about',
+  '跨项目动态': 'Cross-project activity',
+  '查看全部任务': 'View all issues',
+  '进入项目': 'Open project',
 }

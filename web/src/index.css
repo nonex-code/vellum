@@ -202,6 +202,37 @@ body {
 .md a {
   color: var(--primary);
 }
+/* ---------- mermaid 图表 ---------- */
+.md .mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
+  overflow-x: auto;
+}
+.md .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+.md .mermaid-loading {
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--ink-faint);
+  font-size: 13px;
+  text-align: center;
+}
+.md .mermaid-fallback {
+  margin: 12px 0;
+}
+.md .mermaid-hint {
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  color: var(--warn, #d97706);
+}
+.md .mermaid-fallback pre {
+  margin: 0;
+}
 
 /* ---------- 时间线 ---------- */
 .timeline {
@@ -376,6 +407,78 @@ body {
   flex-wrap: wrap;
 }
 
+/* 最近打开的工作台（来自 data/repos.json） */
+.recent {
+  margin-top: 30px;
+  max-width: 470px;
+}
+.recent-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.recent-item:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--surface-2, var(--surface));
+}
+.recent-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.recent-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-faint);
+  font-size: 15px;
+}
+.recent-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.recent-name {
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-path {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recent-badge {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
 /* 真实文件预览 */
 .filecard {
   background: var(--surface);
@@ -535,6 +638,55 @@ body {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11.5px;
   color: var(--ink-faint);
+}
+/* ---------- 面包屑 ---------- */
+.wb-crumb {
+  padding: 10px 24px 0;
+  font-size: 12.5px;
+}
+.wb-crumb .ant-breadcrumb a {
+  color: var(--ink-soft);
+}
+.wb-crumb .ant-breadcrumb a:hover {
+  color: var(--primary);
+}
+.wb-crumb .ant-breadcrumb-separator {
+  color: var(--ink-faint);
+}
+/* ---------- 跨项目动态 ---------- */
+.wb-focus {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+.wb-focus-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+.wb-focus-row:last-child {
+  border-bottom: none;
+}
+.wb-focus-row:hover {
+  background: var(--surface-2);
+}
+.wb-focus-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.project-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
 }
 /* 窄窗口下导航收起为图标：链接项保留当前页文字，右侧按钮留图标 */
 @media (max-width: 1180px) {

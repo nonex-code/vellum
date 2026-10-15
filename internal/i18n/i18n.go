@@ -39,6 +39,7 @@ const (
 	ArchivedProjectHasIssues   = "archived_project_has_issues"
 	TooManyLiveProjects        = "too_many_live_projects"
 	BadScope                   = "bad_scope"
+	ReadOnlyScope              = "read_only_scope"
 	DocPathEmpty               = "doc_path_empty"
 	DocPathInvalid             = "doc_path_invalid"
 	PathSegInvalid             = "path_seg_invalid"
@@ -79,6 +80,7 @@ var entries = map[string][2]string{
 	ArchivedProjectHasIssues:   {"归档项目 %s 中仍有 %d 个任务，请先恢复并迁移或删除", "Archived project %s still has %d issues — restore, move or delete them first"},
 	TooManyLiveProjects:        {"存在 %d 个未归档项目，无法合并回 single 模式（仅允许 1 个）", "There are %d unarchived projects; cannot merge back into single mode (only 1 allowed)"},
 	BadScope:                   {"scope 只能是 repo 或 project", `scope must be "repo" or "project"`},
+	ReadOnlyScope:              {"项目集视图为只读，请在具体项目下操作", "The program view is read-only — perform this action inside a project"},
 	DocPathEmpty:               {"文档路径为空", "Document path is empty"},
 	DocPathInvalid:             {"非法文档路径: %s", "Invalid document path: %s"},
 	PathSegInvalid:             {"路径名含非法字符: %s", "Path segment contains illegal characters: %s"},

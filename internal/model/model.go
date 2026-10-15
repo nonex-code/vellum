@@ -117,6 +117,7 @@ type Issue struct {
 	Created   string            `yaml:"created" json:"created"`
 	Updated   string            `yaml:"updated" json:"updated"`
 	Body      string            `yaml:"-" json:"body"`
+	Project   string            `yaml:"-" json:"project,omitempty"` // 跨项目聚合时回填，不入盘
 }
 
 // Doc 是一篇文档（wiki），对应 docs/ 下 Markdown 的 frontmatter + 正文。

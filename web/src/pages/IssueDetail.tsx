@@ -21,7 +21,7 @@ import {
   PlusOutlined,
   SendOutlined,
 } from '@ant-design/icons'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 
 import { api } from '../api'
@@ -29,6 +29,7 @@ import { useApp } from '../context'
 import { t } from '../i18n'
 import type { Entry, Issue } from '../types'
 import { fmtTime, fromNow, toggleCheckbox } from '../util'
+import { useGo } from '../nav'
 import Markdown from '../components/Markdown'
 import MarkdownEditor from '../components/MarkdownEditor'
 import EditIssueDrawer from '../components/EditIssueDrawer'
@@ -37,7 +38,7 @@ import { StatusTag } from '../components/tags'
 export default function IssueDetail() {
   const { id = '' } = useParams()
   const { schema } = useApp()
-  const nav = useNavigate()
+  const nav = useGo()
   const { message } = AntApp.useApp()
   const [issue, setIssue] = useState<Issue | null>(null)
   const [entries, setEntries] = useState<Entry[]>([])

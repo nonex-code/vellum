@@ -1,11 +1,12 @@
 import { App as AntApp, Button, Card, DatePicker, Form, Input, InputNumber, Select, Space } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { useGo } from '../nav'
 import MarkdownEditor from '../components/MarkdownEditor'
 import type { Issue } from '../types'
 
@@ -26,7 +27,7 @@ interface Values {
 
 export default function IssueNew() {
   const { schema } = useApp()
-  const nav = useNavigate()
+  const nav = useGo()
   const [searchParams] = useSearchParams()
   const { message } = AntApp.useApp()
   const [form] = Form.useForm<Values>()

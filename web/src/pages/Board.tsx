@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { App as AntApp, Button, Input, Skeleton, Space, Tag } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
-
+import { useGo } from '../nav'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope, projectPath } from '../nav'
 import type { Issue } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
 
 export default function Board() {
-  const { schema } = useApp()
-  const nav = useNavigate()
+  const { schema, projectId } = useApp()
+  const nav = useGo()
+  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,15 +40,16 @@ export default function Board() {
   }, [load])
 
   async function drop(status: string) {
-    const id = dragId
+    const key = dragId
     setDragId(null)
     setOver(null)
-    if (!id) return
-    const cur = issues.find((i) => i.id === id)
+    if (!key) return
+    const cur = issues.find((i) => cardKey(i) === key)
     if (!cur || cur.status === status) return
-    setIssues((list) => list.map((i) => (i.id === id ? { ...i, status } : i)))
+    setIssues((list) => list.map((i) => (cardKey(i) === key ? { ...i, status } : i)))
     try {
-      await api.patchIssue(id, { status })
+      if (program && cur.project) await api.patchIssueIn(cur.project, cur.id, { status })
+      else await api.patchIssue(cur.id, { status })
     } catch (e) {
       message.error((e as Error).message)
       load()
@@ -75,6 +77,9 @@ export default function Board() {
   }
 
   const labelDef = (id: string) => schema.labels.find((l) => l.id === id)
+  const cardKey = (i: Issue) => (program ? `${i.project}:${i.id}` : i.id)
+  const openCard = (i: Issue) =>
+    program ? nav(projectPath(i.project || '', `/issue/${i.id}`)) : nav(`/issue/${i.id}`)
 
   if (loading) {
     return (
@@ -100,8 +105,11 @@ export default function Board() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-kicker">{loading ? t('载入中…') : t('{count} 个任务', { count: issues.length })}</div>
-          <h1 className="page-title">{t('看板')}</h1>
+          <div className="page-kicker">
+            {loading ? t('载入中…') : t('{count} 个任务', { count: issues.length })}
+            {program && ` · ${t('全部项目')}`}
+          </div>
+          <h1 className="page-title">{program ? t('全部任务看板') : t('看板')}</h1>
         </div>
       </div>
 
@@ -123,16 +131,18 @@ export default function Board() {
                 <StatusTag id={col.id} />
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className="mono">{items.length}</span>
-                  <Button
-                    type="text"
-                    size="small"
-                    icon={<PlusOutlined />}
-                    onClick={() => {
-                      setAddTitle('')
-                      setAddCol((c) => (c === col.id ? null : col.id))
-                    }}
-                    title={t('在「{name}」快速添加', { name: col.name })}
-                  />
+                  {!program && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<PlusOutlined />}
+                      onClick={() => {
+                        setAddTitle('')
+                        setAddCol((c) => (c === col.id ? null : col.id))
+                      }}
+                      title={t('在「{name}」快速添加', { name: col.name })}
+                    />
+                  )}
                 </span>
               </div>
               <div className="board-col-body">
@@ -180,21 +190,22 @@ export default function Board() {
                 )}
                 {items.map((i) => (
                   <article
-                    key={i.id}
-                    className={`board-card${dragId === i.id ? ' is-drag' : ''}`}
-                    draggable
+                    key={cardKey(i)}
+                    className={`board-card${dragId === cardKey(i) ? ' is-drag' : ''}`}
+                    draggable={!program}
                     onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', i.id)
+                      e.dataTransfer.setData('text/plain', cardKey(i))
                       e.dataTransfer.effectAllowed = 'move'
-                      setDragId(i.id)
+                      setDragId(cardKey(i))
                     }}
                     onDragEnd={() => {
                       setDragId(null)
                       setOver(null)
                     }}
-                    onClick={() => nav(`/issue/${i.id}`)}
+                    onClick={() => openCard(i)}
                   >
                     <div className="board-card-top">
+                      {program && <Tag className="project-tag">{i.project}</Tag>}
                       <span className="stamp">{i.id}</span>
                       <PriorityText id={i.priority} />
                     </div>

@@ -8,11 +8,11 @@ import {
   SyncOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope, projectPath, useGo } from '../nav'
 import { openPalette } from '../bus'
 import type { Issue, SearchHit } from '../types'
 import { StatusTag } from './tags'
@@ -33,8 +33,9 @@ export default function CommandPalette({
   open: boolean
   onClose: () => void
 }) {
-  const { schema, repo } = useApp()
-  const nav = useNavigate()
+  const { schema, repo, projectId } = useApp()
+  const nav = useGo()
+  const program = isProgramScope(projectId)
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [sel, setSel] = useState(0)
@@ -76,16 +77,17 @@ export default function CommandPalette({
       onClose()
       nav(to)
     }
-    const list: Item[] = [
-      { key: 'new', kind: 'action', icon: <PlusOutlined />, label: t('新建任务'), hint: 'N', onRun: go('/new') },
-      { key: 'home', kind: 'action', icon: <HomeOutlined />, label: t('前往首页'), onRun: go('/') },
-      { key: 'issues', kind: 'action', icon: <UnorderedListOutlined />, label: t('任务列表'), onRun: go('/issues') },
-    ]
+    const list: Item[] = []
+    // 项目集作用域下没有可写的项目：新建/文档/设置仍属具体项目，不在此列出。
+    if (!program)
+      list.push({ key: 'new', kind: 'action', icon: <PlusOutlined />, label: t('新建任务'), hint: 'N', onRun: go('/new') })
+    list.push({ key: 'home', kind: 'action', icon: <HomeOutlined />, label: t('前往首页'), onRun: go('/') })
+    list.push({ key: 'issues', kind: 'action', icon: <UnorderedListOutlined />, label: t('任务列表'), onRun: go('/issues') })
     if (schema.modules.board) list.push({ key: 'board', kind: 'action', icon: <ProjectOutlined />, label: t('看板'), onRun: go('/board') })
     if (schema.modules.gantt) list.push({ key: 'gantt', kind: 'action', icon: <ProjectOutlined />, label: t('甘特图'), onRun: go('/gantt') })
-    if (schema.modules.docs) list.push({ key: 'docs', kind: 'action', icon: <SearchOutlined />, label: t('文档'), onRun: go('/docs') })
-    list.push({ key: 'projects', kind: 'action', icon: <HomeOutlined />, label: repo.mode === 'multi' ? t('项目集管理') : t('组织形式设置'), onRun: go('/projects') })
-    list.push({ key: 'settings', kind: 'action', icon: <UnorderedListOutlined />, label: t('设置'), onRun: go('/settings') })
+    if (schema.modules.docs && !program) list.push({ key: 'docs', kind: 'action', icon: <SearchOutlined />, label: t('文档'), onRun: go('/docs') })
+    list.push({ key: 'projects', kind: 'action', icon: <HomeOutlined />, label: repo.mode === 'multi' ? t('项目集总览') : t('转为项目集'), onRun: go('/programs') })
+    if (!program) list.push({ key: 'settings', kind: 'action', icon: <UnorderedListOutlined />, label: t('设置'), onRun: go('/settings') })
     if (schema.modules.search) list.push({ key: 'search', kind: 'action', icon: <SearchOutlined />, label: t('搜索'), onRun: go('/search') })
     if (repo.hasRemote)
       list.push({
@@ -104,7 +106,7 @@ export default function CommandPalette({
         },
       })
     return list
-  }, [schema.modules, repo.hasRemote, repo.mode, nav, onClose])
+  }, [schema.modules, repo.hasRemote, repo.mode, program, nav, onClose])
 
   const filteredActions = useMemo(() => {
     const term = q.trim().toLowerCase()
@@ -113,13 +115,14 @@ export default function CommandPalette({
   }, [actions, q])
 
   const issueItems: Item[] = hits.map((h) => ({
-    key: `i:${h.issue.id}`,
+    key: `i:${h.issue.project || ''}:${h.issue.id}`,
     kind: 'issue',
     label: h.issue.title,
-    hint: h.issue.id,
+    hint: program && h.issue.project ? `${h.issue.project} · ${h.issue.id}` : h.issue.id,
     onRun: () => {
       onClose()
-      nav(`/issue/${h.issue.id}`)
+      if (program) nav(projectPath(h.issue.project || '', `/issue/${h.issue.id}`))
+      else nav(`/issue/${h.issue.id}`)
     },
   }))
 

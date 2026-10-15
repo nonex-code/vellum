@@ -1,18 +1,46 @@
-import { App as AntApp, Button, Collapse, Form, Input, Segmented, Typography } from 'antd'
+import { App as AntApp, Button, Collapse, Form, Input, Segmented, Spin, Typography } from 'antd'
 import { ArrowLeftOutlined, DatabaseOutlined, LinkOutlined, PlusOutlined } from '@ant-design/icons'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { api } from '../api'
 import { t } from '../i18n'
+import type { RepoMeta } from '../types'
 
 type Step = 'home' | 'create' | 'connect'
 
 export default function Welcome({ onLoaded }: { onLoaded: () => Promise<void> }) {
+  const { message } = AntApp.useApp()
   const [step, setStep] = useState<Step>('home')
+  const [recent, setRecent] = useState<RepoMeta[]>([])
+  const [busy, setBusy] = useState('')
+
+  const refresh = useCallback(() => {
+    api
+      .repos()
+      .then((d) => setRecent(d.repos || []))
+      .catch(() => {})
+  }, [])
+  useEffect(refresh, [refresh])
+
+  async function openPath(path: string) {
+    setBusy(path)
+    try {
+      await api.open(path)
+      await onLoaded()
+    } catch (e) {
+      message.error((e as Error).message)
+      refresh()
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <div className="welcome">
       <div className="welcome-inner">
-        {step === 'home' && <Home onPick={setStep} />}
+        {step === 'home' && (
+          <Home onPick={setStep} recent={recent} busy={busy} onOpen={openPath} />
+        )}
         {step === 'create' && (
           <Create onLoaded={onLoaded} onBack={() => setStep('home')} />
         )}
@@ -24,7 +52,17 @@ export default function Welcome({ onLoaded }: { onLoaded: () => Promise<void> })
   )
 }
 
-function Home({ onPick }: { onPick: (s: Step) => void }) {
+function Home({
+  onPick,
+  recent,
+  busy,
+  onOpen,
+}: {
+  onPick: (s: Step) => void
+  recent: RepoMeta[]
+  busy: string
+  onOpen: (path: string) => void
+}) {
   return (
     <div className="hero-grid">
       <div>
@@ -46,6 +84,33 @@ function Home({ onPick }: { onPick: (s: Step) => void }) {
             {t('连接已有仓库')}
           </Button>
         </div>
+        {recent.length > 0 && (
+          <div className="recent">
+            <div className="recent-title">{t('最近打开')}</div>
+            {recent.map((r) => (
+              <button
+                type="button"
+                key={r.path}
+                className="recent-item"
+                disabled={!!busy}
+                onClick={() => onOpen(r.path)}
+              >
+                <span className="recent-icon">
+                  {busy === r.path ? <Spin size="small" /> : <DatabaseOutlined />}
+                </span>
+                <span className="recent-main">
+                  <span className="recent-name">{r.name}</span>
+                  <span className="recent-path">{r.path}</span>
+                </span>
+                {r.mode && (
+                  <span className="recent-badge">
+                    {r.mode === 'multi' ? t('多项目') : t('单项目')}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <FilePreview />
     </div>

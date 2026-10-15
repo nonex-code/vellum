@@ -92,6 +92,7 @@ export interface Issue {
   created: string
   updated: string
   body: string
+  project?: string // 跨项目聚合时回填所属项目 id
 }
 
 export interface IssueNode extends Issue {
@@ -149,6 +150,7 @@ export interface GanttItem {
   assignee?: string
   start?: string
   due?: string
+  project?: string
 }
 
 export interface GanttGroup {

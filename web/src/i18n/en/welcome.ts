@@ -6,6 +6,8 @@ export const welcome: Record<string, string> = {
     'No accounts, no database. Every issue is just a set of Markdown files you can clone, search, and migrate at any time.',
   '新建工作台': 'New workspace',
   '连接已有仓库': 'Connect existing repository',
+  '最近打开': 'Recently opened',
+  '多项目': 'Multi-project',
   '已创建，但推送到远程失败：{err}': 'Created, but the push to remote failed: {err}',
   '工作台已就绪': 'Your workspace is ready',
   '返回': 'Back',

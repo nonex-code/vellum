@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { App as AntApp, Button, Empty, Input, Select, Space, Switch, Table, Tag } from 'antd'
+import { App as AntApp, Button, Dropdown, Empty, Input, Select, Space, Switch, Table, Tag } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope, projectPath, useGo } from '../nav'
 import type { Issue, IssueNode } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
@@ -27,8 +28,9 @@ function toTree(issues: Issue[]): IssueNode[] {
 }
 
 export default function IssueList() {
-  const { schema } = useApp()
-  const nav = useNavigate()
+  const { schema, projects, projectId } = useApp()
+  const nav = useGo()
+  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [data, setData] = useState<Issue[]>([])
   const [loading, setLoading] = useState(false)
@@ -74,6 +76,16 @@ export default function IssueList() {
   }, [params, message])
 
   const columns: ColumnsType<IssueNode> = [
+    ...(program
+      ? [
+          {
+            title: t('项目'),
+            dataIndex: 'project',
+            width: 130,
+            render: (v: string) => <Tag className="project-tag">{v}</Tag>,
+          } as ColumnsType<IssueNode>[number],
+        ]
+      : []),
     { title: t('编号'), dataIndex: 'id', width: 118, render: (v) => <span className="stamp">{v}</span> },
     { title: t('标题'), dataIndex: 'title', render: (v) => <span style={{ fontWeight: 500 }}>{v}</span> },
     { title: t('状态'), dataIndex: 'status', width: 118, render: (v) => <StatusTag id={v} /> },
@@ -105,18 +117,36 @@ export default function IssueList() {
   ]
 
   const filtered = Object.keys(params).length > 0
-  const source = tree ? toTree(data) : data
+  const source = tree && !program ? toTree(data) : data
+  const openIssue = (r: Issue) =>
+    program ? nav(projectPath(r.project || '', `/issue/${r.id}`)) : nav(`/issue/${r.id}`)
 
   return (
     <>
       <div className="page-header">
         <div>
-          <div className="page-kicker">{loading ? t('载入中…') : t('{count} 个任务', { count: data.length })}</div>
-          <h1 className="page-title">{t('任务')}</h1>
+          <div className="page-kicker">
+            {loading ? t('载入中…') : t('{count} 个任务', { count: data.length })}
+            {program && ` · ${t('全部项目')}`}
+          </div>
+          <h1 className="page-title">{program ? t('全部任务') : t('任务')}</h1>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => nav('/new')}>
-          {t('新建任务')}
-        </Button>
+        {program ? (
+          <Dropdown
+            menu={{
+              items: projects.map((p) => ({ key: p.id, label: p.name })),
+              onClick: ({ key }) => nav(projectPath(key, '/new')),
+            }}
+          >
+            <Button type="primary" icon={<PlusOutlined />} disabled={projects.length === 0}>
+              {t('新建任务')}
+            </Button>
+          </Dropdown>
+        ) : (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => nav('/new')}>
+            {t('新建任务')}
+          </Button>
+        )}
       </div>
 
       <div className="filter-bar">
@@ -179,7 +209,7 @@ export default function IssueList() {
             { value: 'title', label: t('按标题') },
           ]}
         />
-        {schema.modules.tree && (
+        {schema.modules.tree && !program && (
           <span className="tree-toggle">
             <Switch size="small" checked={tree} onChange={setTree} /> {t('树形')}
           </span>
@@ -188,14 +218,14 @@ export default function IssueList() {
 
       <Table
         className="ledger"
-        rowKey="id"
+        rowKey={(r) => (program ? `${r.project}-${r.id}` : r.id)}
         size="middle"
         columns={columns}
         dataSource={source}
         loading={loading}
         indentSize={18}
         onRow={(r) => ({
-          onClick: () => nav(`/issue/${r.id}`),
+          onClick: () => openIssue(r),
           style: { cursor: 'pointer' },
         })}
         pagination={{ pageSize: 25, hideOnSinglePage: true }}
@@ -205,7 +235,7 @@ export default function IssueList() {
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={filtered ? t('没有匹配的任务') : t('还没有任务')}
             >
-              {!filtered && (
+              {!filtered && !program && (
                 <Button type="primary" icon={<PlusOutlined />} onClick={() => nav('/new')}>
                   {t('创建第一个任务')}
                 </Button>

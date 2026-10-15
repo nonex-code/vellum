@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -373,6 +374,147 @@ func (s *Server) snapshot() (model.Config, string, *gitrepo.Repo) {
 	return s.projCfg, s.repoRoot, s.repo
 }
 
+// reqProject 解析请求要操作的项目：查询参数 project / 请求头 X-WB-Project 优先，
+// 其次回落到服务端当前项目。"*" 表示跨项目聚合（仅读接口支持）。
+// 这样 URL 就是项目上下文的唯一真相，服务端 projectID 退化为默认值/回退。
+func (s *Server) reqProject(r *http.Request) string {
+	p := s.explicitProject(r)
+	if p == "" {
+		s.mu.RLock()
+		p = s.projectID
+		s.mu.RUnlock()
+	}
+	return p
+}
+
+// explicitProject 取请求显式指定的项目作用域：查询参数 project 优先，其次请求头。
+// 请求头值由前端 encodeURIComponent 编码（浏览器 header 仅支持 ISO-8859-1），这里还原。
+func (s *Server) explicitProject(r *http.Request) string {
+	if p := r.URL.Query().Get("project"); p != "" {
+		return p
+	}
+	h := r.Header.Get("X-WB-Project")
+	if h == "" {
+		return ""
+	}
+	if dec, err := url.PathUnescape(h); err == nil {
+		return dec
+	}
+	return h
+}
+
+// isAggregate 判断请求是否要跨项目聚合。
+func isAggregate(pid string) bool {
+	return pid == "*" || pid == "all"
+}
+
+// isMulti 返回当前仓库是否处于项目集（多项目）模式。
+func (s *Server) isMulti() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.Workspace.Mode == "multi"
+}
+
+// rejectAggregate 拦截跨项目聚合作用域下的写操作：聚合视图只读。
+func (s *Server) rejectAggregate(w http.ResponseWriter, r *http.Request) bool {
+	if isAggregate(s.reqProject(r)) {
+		s.err(w, r, 400, i18n.ReadOnlyScope)
+		return true
+	}
+	return false
+}
+
+// projectScope 返回请求项目对应的 issues 根目录、生效配置与 git 仓库。
+func (s *Server) projectScope(r *http.Request) (string, model.Config, *gitrepo.Repo, error) {
+	s.mu.RLock()
+	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
+	s.mu.RUnlock()
+	if repoRoot == "" {
+		return "", model.Config{}, nil, i18n.New(i18n.NoRepo)
+	}
+	pid := s.reqProject(r)
+	if mode != "multi" || isAggregate(pid) {
+		pid = ""
+	}
+	root := repoRoot
+	if pid != "" {
+		dir := filepath.Join(repoRoot, "projects", pid)
+		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+			return "", model.Config{}, nil, i18n.New(i18n.ProjectNotFound, pid)
+		}
+		root = dir
+	}
+	cfg, err := config.LoadFor(repoRoot, pid)
+	if err != nil {
+		return "", model.Config{}, nil, err
+	}
+	return root, cfg, repo, nil
+}
+
+// storeFor 构造请求项目对应的 store（不改变服务端全局状态）。
+func (s *Server) storeFor(r *http.Request) (*store.Store, model.Config, error) {
+	root, cfg, repo, err := s.projectScope(r)
+	if err != nil {
+		return nil, cfg, err
+	}
+	return store.New(root, cfg.IDPrefix, repo, s.opts.Push), cfg, nil
+}
+
+// cfgFor 只取请求项目的生效配置（schema、配置中心用）。
+func (s *Server) cfgFor(r *http.Request) (model.Config, error) {
+	_, cfg, _, err := s.projectScope(r)
+	return cfg, err
+}
+
+// issuesFor 返回请求作用域下的任务列表与生效配置。
+// project=* 时聚合所有未归档项目，并在每条任务的 Project 字段回填项目 id。
+func (s *Server) issuesFor(r *http.Request) ([]model.Issue, model.Config, error) {
+	pid := s.reqProject(r)
+	s.mu.RLock()
+	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
+	s.mu.RUnlock()
+	if repoRoot == "" {
+		return nil, model.Config{}, i18n.New(i18n.NoRepo)
+	}
+	if isAggregate(pid) && mode == "multi" {
+		cfg, _ := config.LoadFor(repoRoot, "")
+		out := []model.Issue{}
+		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+		if err == nil {
+			for _, e := range ents {
+				if !e.IsDir() {
+					continue
+				}
+				pdir := filepath.Join(repoRoot, "projects", e.Name())
+				if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
+					continue // 归档项目不参与聚合
+				}
+				pcfg, err := config.LoadFor(repoRoot, e.Name())
+				if err != nil {
+					continue
+				}
+				st := store.New(pdir, pcfg.IDPrefix, repo, false)
+				issues, err := st.ListIssues()
+				if err != nil {
+					continue
+				}
+				for i := range issues {
+					issues[i].Project = e.Name()
+				}
+				out = append(out, issues...)
+			}
+		}
+		return out, cfg, nil
+	}
+	root, cfg, repo2, err := s.projectScope(r)
+	if err != nil {
+		return nil, cfg, err
+	}
+	st := store.New(root, cfg.IDPrefix, repo2, s.opts.Push)
+	issues, err := st.ListIssues()
+	return issues, cfg, err
+}
+
 func (s *Server) projectsMeta() []model.ProjectMeta {
 	s.mu.RLock()
 	repoRoot := s.repoRoot
@@ -615,21 +757,24 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSchema(w http.ResponseWriter, r *http.Request) {
-	cfg, _, _ := s.snapshot()
+	cfg, err := s.cfgFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
 	writeJSON(w, cfg)
 }
 
 // handleOverview 汇总首页所需的统计、需关注任务与最近动态。
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	issues, cfg, err := s.issuesFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
-	cfg, _, _ := s.snapshot()
-	issues, err := st.ListIssues()
+	st, _, err := s.storeFor(r)
 	if err != nil {
-		s.errOf(w, r, 500, err)
+		s.errOf(w, r, 400, err)
 		return
 	}
 	recent, _ := st.RecentActivity(8)
@@ -841,17 +986,11 @@ func (s *Server) handleSelectProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
-		return
-	}
-	issues, err := st.ListIssues()
+	issues, cfg, err := s.issuesFor(r)
 	if err != nil {
-		s.errOf(w, r, 500, err)
+		s.errOf(w, r, 400, err)
 		return
 	}
-	cfg, _, _ := s.snapshot()
 	prioRank := map[string]int{}
 	for i, p := range cfg.Priorities {
 		prioRank[p.ID] = i
@@ -937,12 +1076,52 @@ func sortIssues(list []model.Issue, by, order string, prioRank map[string]int) {
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
+	q := r.URL.Query().Get("q")
+	pid := s.reqProject(r)
+	s.mu.RLock()
+	repoRoot := s.repoRoot
+	mode := s.cfg.Workspace.Mode
+	s.mu.RUnlock()
+	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)
 		return
 	}
-	hits, err := st.Search(r.URL.Query().Get("q"))
+	if isAggregate(pid) && mode == "multi" {
+		out := []store.SearchHit{}
+		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+		if err == nil {
+			for _, e := range ents {
+				if !e.IsDir() {
+					continue
+				}
+				pdir := filepath.Join(repoRoot, "projects", e.Name())
+				if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
+					continue
+				}
+				pcfg, err := config.LoadFor(repoRoot, e.Name())
+				if err != nil {
+					continue
+				}
+				st := store.New(pdir, pcfg.IDPrefix, s.repo, false)
+				hits, err := st.Search(q)
+				if err != nil {
+					continue
+				}
+				for i := range hits {
+					hits[i].Issue.Project = e.Name()
+				}
+				out = append(out, hits...)
+			}
+		}
+		writeJSON(w, map[string]any{"hits": out})
+		return
+	}
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	hits, err := st.Search(q)
 	if err != nil {
 		s.errOf(w, r, 500, err)
 		return
@@ -951,11 +1130,15 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	if s.rejectAggregate(w, r) {
 		return
 	}
+	st, cfg, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	_ = cfg
 	var in struct {
 		Title     string            `json:"title"`
 		Body      string            `json:"body"`
@@ -993,9 +1176,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	iss, entries, err := st.ReadIssue(r.PathValue("id"))
@@ -1007,9 +1190,12 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePatch(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	if s.rejectAggregate(w, r) {
+		return
+	}
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	var patch map[string]any
@@ -1027,9 +1213,12 @@ func (s *Server) handlePatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	if s.rejectAggregate(w, r) {
+		return
+	}
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	id := r.PathValue("id")
@@ -1042,9 +1231,12 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddEntry(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	if s.rejectAggregate(w, r) {
+		return
+	}
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	var in struct {
@@ -1066,9 +1258,12 @@ func (s *Server) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	if s.rejectAggregate(w, r) {
+		return
+	}
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, int64(s.opts.MaxUploadMB)<<20)
@@ -1097,8 +1292,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
+	st, _, err := s.storeFor(r)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}

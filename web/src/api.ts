@@ -1,10 +1,20 @@
 import type { Doc, DocHit, Entry, GanttGroup, Issue, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit, UpdateInfo, VersionInfo } from './types'
 import { getLang, t } from './i18n'
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+// apiProject 是当前 URL 项目上下文，App 每次渲染时同步设置。
+// 所有请求带上 X-WB-Project，服务端据此按项目隔离读写；"*" 表示跨项目聚合。
+let apiProject = ''
+export function setApiProject(pid: string) {
+  apiProject = pid
+}
+
+async function req<T>(path: string, init?: RequestInit, project?: string): Promise<T> {
   // 每次请求带上界面语言，后端提示语跟着切换。
   const headers = new Headers(init?.headers)
   headers.set('X-WB-Lang', getLang())
+  const proj = project === undefined ? apiProject : project
+  // header 值只能是 ISO-8859-1；项目 id 可能是中文（slug 保留 CJK），必须先编码。
+  if (proj) headers.set('X-WB-Project', encodeURIComponent(proj))
   const r = await fetch(path, { ...init, headers })
   const ct = r.headers.get('content-type') || ''
   const data = ct.includes('json') ? await r.json() : await r.text()
@@ -44,13 +54,19 @@ export const api = {
     req<{ issues: Issue[] }>(`/api/issues?${new URLSearchParams(params).toString()}`),
   getIssue: (id: string) => req<{ issue: Issue; entries: Entry[] }>(`/api/issues/${encodeURIComponent(id)}`),
   createIssue: (body: Partial<Issue>) => req<{ issue: Issue }>('/api/issues', json(body)),
+  createIssueIn: (project: string, body: Partial<Issue>) =>
+    req<{ issue: Issue }>('/api/issues', json(body), project),
   patchIssue: (id: string, body: Record<string, unknown>) =>
     req<{ issue: Issue }>(`/api/issues/${encodeURIComponent(id)}`, json(body, 'PATCH')),
+  patchIssueIn: (project: string, id: string, body: Record<string, unknown>) =>
+    req<{ issue: Issue }>(`/api/issues/${encodeURIComponent(id)}`, json(body, 'PATCH'), project),
   deleteIssue: (id: string) =>
     req<{ ok: boolean }>(`/api/issues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addEntry: (id: string, body: { body: string; type?: string }) =>
     req<{ entry: Entry }>(`/api/issues/${encodeURIComponent(id)}/entries`, json(body)),
   search: (q: string) => req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
+  searchAll: (q: string) =>
+    req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}&project=*`),
   upload: (id: string, file: File) => {
     const fd = new FormData()
     fd.append('file', file)

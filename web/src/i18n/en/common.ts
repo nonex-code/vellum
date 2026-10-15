@@ -50,4 +50,9 @@ export const common: Record<string, string> = {
   设置: 'Settings',
   远程: 'remote',
   本地: 'local',
+  '项目集总览': 'Portfolio overview',
+  '全部项目': 'All projects',
+  '选择项目': 'Select project',
+  '任务详情': 'Issue detail',
+  '全部任务看板': 'All issues board',
 }

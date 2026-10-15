@@ -14,12 +14,12 @@ import SettingsYamlTab from '../components/SettingsYamlTab'
 import UpdatePanel from '../components/UpdatePanel'
 
 export default function Settings() {
-  const { schema, repo, reload } = useApp()
+  const { schema, repo, project, reload } = useApp()
   const { message } = AntApp.useApp()
 
   const multi = repo.mode === 'multi'
   const projectLabel =
-    repo.projectMeta?.name || repo.project?.name || repo.currentProject || t('当前项目')
+    project?.name || repo.projectMeta?.name || repo.project?.name || repo.currentProject || t('当前项目')
 
   const [draft, setDraft] = useState<Schema>(() => clone(schema))
   const [scope, setScope] = useState<Scope>('repo')

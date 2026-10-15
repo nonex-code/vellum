@@ -70,6 +70,11 @@ export const chrome: Record<string, string> = {
   '支持 Markdown：# 标题、**粗体**、- 列表、- [ ] 待办…':
     'Markdown supported: # heading, **bold**, - list, - [ ] to-do…',
   '暂无内容可预览': 'Nothing to preview yet',
+  'Mermaid 图表': 'Mermaid diagram',
+  '图表渲染中…': 'Rendering diagram…',
+  '图表语法有误，已显示源码': 'Invalid diagram syntax — showing the source instead',
+  '```mermaid\ngraph TD\n  A[开始] --> B[结束]\n```\n':
+    '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n',
   // 点工具栏按钮时插入正文的占位样例
   内容: 'Content',
   列表项: 'List item',

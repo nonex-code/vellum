@@ -8,7 +8,7 @@ import {
   SearchOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useGo } from '../nav'
 
 import { api } from '../api'
 import { useApp } from '../context'
@@ -27,8 +27,8 @@ function greeting() {
 }
 
 export default function Home() {
-  const { schema, repo } = useApp()
-  const nav = useNavigate()
+  const { schema, repo, project } = useApp()
+  const nav = useGo()
   const { message } = AntApp.useApp()
   const [ov, setOv] = useState<Overview | null>(null)
   const [loading, setLoading] = useState(true)
@@ -62,7 +62,7 @@ export default function Home() {
 
   const total = ov.counts.total || 0
   const colorOf = (id: string) => schema.statuses.find((s) => s.id === id)?.color || '#9aa0a6'
-  const projectName = repo.projectMeta?.name
+  const projectName = project?.name || repo.projectMeta?.name
   const title = schema.workspace?.mode === 'multi' && projectName ? projectName : schema.workspace?.name
 
   const statusSegs = ov.byStatus.filter((s) => s.count > 0)

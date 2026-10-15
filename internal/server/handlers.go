@@ -18,20 +18,29 @@ import (
 
 // ---------- 甘特图 ----------
 
-// handleGantt 返回按里程碑分组的时间轴数据（含未排期组）。
-func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
-		return
-	}
-	cfg, _, _ := s.snapshot()
-	issues, err := st.ListIssues()
-	if err != nil {
-		writeJSON(w, map[string]any{"groups": []any{}})
-		return
-	}
-	doneCat := func(sid string) bool {
+type ganttItem struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Status   string `json:"status"`
+	Done     bool   `json:"done"`
+	Priority string `json:"priority,omitempty"`
+	Assignee string `json:"assignee,omitempty"`
+	Start    string `json:"start,omitempty"`
+	Due      string `json:"due,omitempty"`
+	Project  string `json:"project,omitempty"`
+}
+
+type ganttGroup struct {
+	ID    string      `json:"id"`
+	Name  string      `json:"name"`
+	Color string      `json:"color,omitempty"`
+	Start string      `json:"start,omitempty"`
+	End   string      `json:"end,omitempty"`
+	Items []ganttItem `json:"items"`
+}
+
+func doneCatFunc(cfg model.Config) func(string) bool {
+	return func(sid string) bool {
 		for _, sc := range cfg.Statuses {
 			if sc.ID == sid {
 				return sc.Category == "done"
@@ -39,21 +48,79 @@ func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
 		}
 		return false
 	}
-	type gItem struct {
-		ID       string `json:"id"`
-		Title    string `json:"title"`
-		Status   string `json:"status"`
-		Done     bool   `json:"done"`
-		Priority string `json:"priority,omitempty"`
-		Assignee string `json:"assignee,omitempty"`
-		Start    string `json:"start,omitempty"`
-		Due      string `json:"due,omitempty"`
+}
+
+// aggregateGantt 在项目集层面按项目分组，每组的 items 带上所属项目 id。
+func (s *Server) aggregateGantt() []ganttGroup {
+	s.mu.RLock()
+	repoRoot, repo := s.repoRoot, s.repo
+	s.mu.RUnlock()
+	groups := []ganttGroup{}
+	ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+	if err != nil {
+		return groups
 	}
-	byID := map[string][]gItem{}
+	for _, e := range ents {
+		if !e.IsDir() {
+			continue
+		}
+		pdir := filepath.Join(repoRoot, "projects", e.Name())
+		if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
+			continue
+		}
+		pcfg, err := config.LoadFor(repoRoot, e.Name())
+		if err != nil {
+			continue
+		}
+		st := store.New(pdir, pcfg.IDPrefix, repo, false)
+		issues, err := st.ListIssues()
+		if err != nil {
+			continue
+		}
+		doneCat := doneCatFunc(pcfg)
+		items := []ganttItem{}
+		var minStart, maxEnd string
+		for _, iss := range issues {
+			items = append(items, ganttItem{ID: iss.ID, Title: iss.Title, Status: iss.Status, Done: doneCat(iss.Status),
+				Priority: iss.Priority, Assignee: iss.Assignee, Start: iss.Start, Due: iss.Due, Project: e.Name()})
+			if iss.Start != "" && (minStart == "" || iss.Start < minStart) {
+				minStart = iss.Start
+			}
+			if iss.Due != "" && iss.Due > maxEnd {
+				maxEnd = iss.Due
+			}
+		}
+		name := e.Name()
+		if pcfg.Project.Name != "" {
+			name = pcfg.Project.Name
+		}
+		groups = append(groups, ganttGroup{ID: e.Name(), Name: name, Start: minStart, End: maxEnd, Items: items})
+	}
+	return groups
+}
+
+// handleGantt 返回按里程碑分组的时间轴数据（含未排期组）；项目集作用域下按项目分组。
+func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
+	if isAggregate(s.reqProject(r)) && s.isMulti() {
+		writeJSON(w, map[string]any{"groups": s.aggregateGantt()})
+		return
+	}
+	st, cfg, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	issues, err := st.ListIssues()
+	if err != nil {
+		writeJSON(w, map[string]any{"groups": []any{}})
+		return
+	}
+	doneCat := doneCatFunc(cfg)
+	byID := map[string][]ganttItem{}
 	var order []string
-	unscheduled := []gItem{}
+	unscheduled := []ganttItem{}
 	for _, iss := range issues {
-		it := gItem{ID: iss.ID, Title: iss.Title, Status: iss.Status, Done: doneCat(iss.Status),
+		it := ganttItem{ID: iss.ID, Title: iss.Title, Status: iss.Status, Done: doneCat(iss.Status),
 			Priority: iss.Priority, Assignee: iss.Assignee, Start: iss.Start, Due: iss.Due}
 		if iss.Milestone != "" && byID[iss.Milestone] == nil {
 			order = append(order, iss.Milestone)
@@ -64,31 +131,23 @@ func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
 			unscheduled = append(unscheduled, it)
 		}
 	}
-	type gGroup struct {
-		ID    string  `json:"id"`
-		Name  string  `json:"name"`
-		Color string  `json:"color,omitempty"`
-		Start string  `json:"start,omitempty"`
-		End   string  `json:"end,omitempty"`
-		Items []gItem `json:"items"`
-	}
-	groups := make([]gGroup, 0, len(cfg.Milestones)+1)
+	groups := make([]ganttGroup, 0, len(cfg.Milestones)+1)
 	seen := map[string]bool{}
 	for _, m := range cfg.Milestones {
 		seen[m.ID] = true
 		items := byID[m.ID]
 		if items == nil {
-			items = []gItem{}
+			items = []ganttItem{}
 		}
-		groups = append(groups, gGroup{ID: m.ID, Name: m.Name, Color: m.Color, Start: m.Start, End: m.End, Items: items})
+		groups = append(groups, ganttGroup{ID: m.ID, Name: m.Name, Color: m.Color, Start: m.Start, End: m.End, Items: items})
 	}
 	for _, id := range order {
 		if !seen[id] {
-			groups = append(groups, gGroup{ID: id, Name: id, Items: byID[id]})
+			groups = append(groups, ganttGroup{ID: id, Name: id, Items: byID[id]})
 		}
 	}
 	if len(unscheduled) > 0 {
-		groups = append(groups, gGroup{ID: "", Name: i18n.T(s.langOf(r), i18n.Unscheduled), Items: unscheduled})
+		groups = append(groups, ganttGroup{ID: "", Name: i18n.T(s.langOf(r), i18n.Unscheduled), Items: unscheduled})
 	}
 	writeJSON(w, map[string]any{"groups": groups})
 }
@@ -478,9 +537,16 @@ const rawConfigTemplate = `# Vellum 配置（跟随仓库/项目走，脱离平�
 func (s *Server) handleConfigRawGet(w http.ResponseWriter, r *http.Request) {
 	scope := r.URL.Query().Get("scope")
 	_, repoRoot, _ := s.snapshot()
+	extraPID := s.explicitProject(r)
 	s.mu.RLock()
 	pid := s.projectID
+	mode := s.cfg.Workspace.Mode
 	s.mu.RUnlock()
+	if mode != "multi" || isAggregate(extraPID) {
+		pid = ""
+	} else if extraPID != "" {
+		pid = extraPID
+	}
 	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)
 		return
@@ -511,10 +577,17 @@ func (s *Server) handleConfigRawPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, repoRoot, _ := s.snapshot()
+	extraPID := s.explicitProject(r)
 	s.mu.RLock()
 	pid := s.projectID
+	mode := s.cfg.Workspace.Mode
 	repo := s.repo
 	s.mu.RUnlock()
+	if mode != "multi" || isAggregate(extraPID) {
+		pid = ""
+	} else if extraPID != "" {
+		pid = extraPID
+	}
 	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)
 		return
@@ -583,9 +656,9 @@ func (s *Server) handleConfigRawPut(w http.ResponseWriter, r *http.Request) {
 // ---------- 文档（wiki） ----------
 
 func (s *Server) handleDocsList(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	docs, err := st.ListDocs()
@@ -597,9 +670,9 @@ func (s *Server) handleDocsList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocsCreate(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	var in struct {
@@ -634,9 +707,9 @@ func docParam(r *http.Request) string {
 }
 
 func (s *Server) handleDocsGet(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	d, err := st.ReadDoc(docParam(r))
@@ -648,9 +721,9 @@ func (s *Server) handleDocsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocsUpdate(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	var patch map[string]any
@@ -668,9 +741,9 @@ func (s *Server) handleDocsUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocsDelete(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	path := docParam(r)
@@ -683,9 +756,9 @@ func (s *Server) handleDocsDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocsSearch(w http.ResponseWriter, r *http.Request) {
-	st, ok := s.activeStore()
-	if !ok {
-		s.err(w, r, 400, i18n.NoRepo)
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
 		return
 	}
 	hits, err := st.SearchDocs(r.URL.Query().Get("q"))

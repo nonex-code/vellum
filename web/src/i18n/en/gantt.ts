@@ -24,4 +24,5 @@ export const gantt: Record<string, string> = {
   '还没有带日期的任务：在任务详情页或编辑抽屉中设置「开始日期 / 截止日期」后，这里会出现时间条。':
     'No issues with dates yet: set a start / due date in the issue detail or the edit drawer, and bars appear here.',
   '去设置 →': 'Set dates →',
+  '全部任务甘特图': 'All issues Gantt chart',
 }
