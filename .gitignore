@@ -2,6 +2,7 @@
 /vellum
 /vellum.exe
 /vellum-desktop.exe
+/Temp/
 *.exe~
 *.log
 
