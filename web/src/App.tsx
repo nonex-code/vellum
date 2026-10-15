@@ -146,10 +146,20 @@ export default function App() {
   }
 
   const projects: ProjectMeta[] = repo.projects || []
+  // 未知项目（失效书签/手输 id）不要落到幽灵目录；直接回项目集总览。
+  if (multi && projectId !== ROOT_PID && !projects.some((p) => p.id === projectId)) {
+    return <Navigate to={projectPath(ROOT_PID, '/')} replace />
+  }
   const project = multi ? projects.find((p) => p.id === projectId) : repo.projectMeta
+  // 统一的项目名回显：根项目显示工作台名，未知 id 回退为 id 本身。
+  const projectName = (id?: string) => {
+    if (!id) return ''
+    if (id === ROOT_PID) return repo.project?.name || schema.workspace?.name || ''
+    return projects.find((p) => p.id === id)?.name || id
+  }
 
   return (
-    <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects, aggregate }}>
+    <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects, aggregate, projectName }}>
       <div className="app-shell">
         <TopBar />
         <div className="app-body">

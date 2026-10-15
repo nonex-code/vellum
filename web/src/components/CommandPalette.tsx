@@ -33,7 +33,7 @@ export default function CommandPalette({
   open: boolean
   onClose: () => void
 }) {
-  const { schema, repo, aggregate: program } = useApp()
+  const { schema, repo, aggregate: program, projectName } = useApp()
   const nav = useGo()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -117,7 +117,7 @@ export default function CommandPalette({
     key: `i:${h.issue.project || ''}:${h.issue.id}`,
     kind: 'issue',
     label: h.issue.title,
-    hint: program && h.issue.project ? `${h.issue.project} · ${h.issue.id}` : h.issue.id,
+    hint: program && h.issue.project ? `${projectName(h.issue.project)} · ${h.issue.id}` : h.issue.id,
     onRun: () => {
       onClose()
       if (program) nav(projectPath(h.issue.project || ROOT_PID, `/issue/${h.issue.id}`))

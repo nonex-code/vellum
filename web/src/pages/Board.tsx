@@ -11,7 +11,7 @@ import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
 
 export default function Board() {
-  const { schema, aggregate: program } = useApp()
+  const { schema, aggregate: program, projectName } = useApp()
   const nav = useGo()
   const { message } = AntApp.useApp()
   const [issues, setIssues] = useState<Issue[]>([])
@@ -204,7 +204,7 @@ export default function Board() {
                     onClick={() => openCard(i)}
                   >
                     <div className="board-card-top">
-                      {program && <Tag className="project-tag">{i.project}</Tag>}
+                      {program && <Tag className="project-tag">{projectName(i.project)}</Tag>}
                       <span className="stamp">{i.id}</span>
                       <PriorityText id={i.priority} />
                     </div>

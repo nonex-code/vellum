@@ -31,7 +31,7 @@ function highlight(text: string, q: string) {
 
 export default function Search() {
   const nav = useGo()
-  const { schema, aggregate: program } = useApp()
+  const { schema, aggregate: program, projectName } = useApp()
   const { message } = AntApp.useApp()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -130,7 +130,7 @@ export default function Search() {
           >
             <div style={{ width: '100%' }}>
               <Space size={12} wrap style={{ marginBottom: 4 }}>
-                {program && <Tag className="project-tag">{h.issue.project}</Tag>}
+                {program && <Tag className="project-tag">{projectName(h.issue.project)}</Tag>}
                 <span className="stamp">{h.issue.id}</span>
                 <StatusTag id={h.issue.status} />
                 <PriorityText id={h.issue.priority} />

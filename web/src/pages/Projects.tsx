@@ -40,7 +40,7 @@ import { StatusTag } from '../components/tags'
 import NewProjectModal from '../components/NewProjectModal'
 
 export default function Projects() {
-  const { schema, repo, reload } = useApp()
+  const { schema, repo, reload, projectName } = useApp()
   const nav = useNavigate()
   const { message } = AntApp.useApp()
   const { token } = theme.useToken()
@@ -345,7 +345,7 @@ export default function Projects() {
                 className="wb-focus-row"
                 onClick={() => nav(projectPath(i.project || ROOT_PID, `/issue/${i.id}`))}
               >
-                <Tag className="project-tag">{i.project}</Tag>
+                <Tag className="project-tag">{projectName(i.project)}</Tag>
                 <span className="stamp">{i.id}</span>
                 <span className="wb-focus-title">{i.title}</span>
                 <StatusTag id={i.status} />

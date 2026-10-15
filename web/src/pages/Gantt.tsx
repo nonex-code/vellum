@@ -80,7 +80,7 @@ const CSS = `
 `
 
 export default function Gantt() {
-  const { schema, aggregate: program } = useApp()
+  const { schema, aggregate: program, projectName } = useApp()
   const nav = useGo()
   const { message } = AntApp.useApp()
   const [groups, setGroups] = useState<GanttGroup[]>([])
@@ -524,7 +524,7 @@ export default function Gantt() {
                                 className={`wb-g-title${it.done ? ' is-done' : ''}`}
                                 onClick={() => goIssue(it)}
                               >
-                                {program && <span className="mono">{it.project} · </span>}
+                                {program && <span className="mono">{projectName(it.project)} · </span>}
                                 {it.title}
                               </span>
                             </div>

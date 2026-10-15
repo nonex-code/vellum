@@ -28,7 +28,7 @@ function toTree(issues: Issue[]): IssueNode[] {
 }
 
 export default function IssueList() {
-  const { schema, repo, projects, aggregate: program } = useApp()
+  const { schema, projects, aggregate: program, projectName } = useApp()
   const nav = useGo()
   const { message } = AntApp.useApp()
   const [data, setData] = useState<Issue[]>([])
@@ -43,13 +43,6 @@ export default function IssueList() {
   const [sort, setSort] = useState(searchParams.get('sort') || 'updated')
   const [tree, setTree] = useState(searchParams.get('tree') === '1')
   const include = searchParams.get('include') || ''
-
-  // 聚合视图中展示的任务属于哪个项目（根项目用工作台名）。
-  const projectName = (id?: string) => {
-    if (!id) return ''
-    if (id === ROOT_PID) return repo.project?.name || schema.workspace.name
-    return projects.find((p) => p.id === id)?.name || id
-  }
 
   const params = useMemo(() => {
     const p: Record<string, string> = {}

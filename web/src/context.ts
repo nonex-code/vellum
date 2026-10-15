@@ -13,6 +13,8 @@ export interface AppCtx {
   projects: ProjectMeta[]
   /** 当前视图是否为聚合视图（根项目 + include=children，如“全部任务”）。 */
   aggregate: boolean
+  /** 项目 id → 展示名（根项目回退到工作台名，未知 id 回退为 id 本身）。 */
+  projectName: (id?: string) => string
 }
 
 export const Ctx = createContext<AppCtx | null>(null)
