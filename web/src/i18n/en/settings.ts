@@ -2,9 +2,13 @@
 export const settings: Record<string, string> = {
   // ---- pages/Settings.tsx ----
   当前项目: 'Current project',
+  项目集设置: 'Portfolio settings',
+  项目设置: 'Project settings',
   配置已保存: 'Configuration saved',
   '跟仓库走的纯文本配置 · workbench.yaml':
     'Plain-text config that ships with the repository · workbench.yaml',
+  '仅覆盖当前项目的纯文本配置 · projects/<id>/workbench.yaml':
+    'Plain-text config overriding only this project · projects/<id>/workbench.yaml',
   基本: 'General',
   状态与标签: 'Statuses & Labels',
   里程碑与字段: 'Milestones & Fields',
@@ -63,14 +67,11 @@ export const settings: Record<string, string> = {
   '清单 + 子任务': 'Checklist + subtasks',
   已转为多项目模式: 'Converted to multi-project mode',
   已转为单项目模式: 'Converted to single-project mode',
-  仓库级: 'Repository level',
-  '当前项目：{name}': 'Current project: {name}',
-  编辑作用域: 'Editing Scope',
-  '写入仓库根 workbench.yaml，对所有项目生效（内置默认之上的一层）。':
-    'Writes to the repository-root workbench.yaml and applies to all projects (one layer above the built-in defaults).',
-  '写入 projects/{path}/workbench.yaml，仅覆盖当前项目。':
-    'Writes to projects/{path}/workbench.yaml and only overrides the current project.',
   工作台信息: 'Workspace Info',
+  项目信息: 'Project Info',
+  项目简介: 'Project description',
+  我的项目: 'My project',
+  '一句话说明这个项目（可选）': 'One line on what this project is about (optional)',
   界面语言: 'Interface language',
   '仓库默认语言；本机用顶栏「中/EN」切换会覆盖它，且不影响任何数据。':
     'Repository default language; the top-bar 中/EN switch overrides it on this machine and never touches your data.',

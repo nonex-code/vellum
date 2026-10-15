@@ -146,6 +146,7 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     { to: '/programs/board', label: t('全部看板'), icon: <ProjectOutlined />, show: schema.modules.board },
     { to: '/programs/gantt', label: t('全部甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
     { to: '/programs/search', label: t('全部搜索'), icon: <SearchOutlined />, show: schema.modules.search },
+    { to: '/programs/settings', label: t('设置'), icon: <SettingOutlined /> },
   ]
 
   function projectViews(id: string): ViewDef[] {

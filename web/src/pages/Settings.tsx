@@ -4,6 +4,7 @@ import { App as AntApp, Tabs } from 'antd'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
+import { isProgramScope } from '../nav'
 import type { Schema } from '../types'
 import { type Scope, clone, collectIdIssues, managedKeys, toYaml } from '../components/SettingsShared'
 import SettingsBasicTab from '../components/SettingsBasicTab'
@@ -14,26 +15,22 @@ import SettingsYamlTab from '../components/SettingsYamlTab'
 import UpdatePanel from '../components/UpdatePanel'
 
 export default function Settings() {
-  const { schema, repo, project, reload } = useApp()
+  const { schema, repo, projectId, reload } = useApp()
   const { message } = AntApp.useApp()
 
   const multi = repo.mode === 'multi'
-  const projectLabel =
-    project?.name || repo.projectMeta?.name || repo.project?.name || repo.currentProject || t('当前项目')
+  // 设置的职责由所在位置决定：项目集节点下 = 仓库级（项目集默认）；项目下 = 项目级（仅覆盖本项目）。
+  // 单项目模式没有项目级概念，恒为仓库级。
+  const program = !multi || isProgramScope(projectId)
+  const scope: Scope = program ? 'repo' : 'project'
 
   const [draft, setDraft] = useState<Schema>(() => clone(schema))
-  const [scope, setScope] = useState<Scope>('repo')
   const [saving, setSaving] = useState(false)
 
   // 生效 schema 变化（如切换项目 / 保存后 reload）时，重置表单基线。
   useEffect(() => {
     setDraft(clone(schema))
   }, [schema])
-
-  // 回到单项目模式时，作用域只能是仓库级。
-  useEffect(() => {
-    if (!multi) setScope((s) => (s === 'project' ? 'repo' : s))
-  }, [multi])
 
   async function save() {
     const issues = collectIdIssues(draft)
@@ -59,8 +56,12 @@ export default function Settings() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-kicker">{t('跟仓库走的纯文本配置 · workbench.yaml')}</div>
-          <h1 className="page-title">{t('配置中心')}</h1>
+          <div className="page-kicker">
+            {program
+              ? t('跟仓库走的纯文本配置 · workbench.yaml')
+              : t('仅覆盖当前项目的纯文本配置 · projects/<id>/workbench.yaml')}
+          </div>
+          <h1 className="page-title">{program ? t('项目集设置') : t('项目设置')}</h1>
         </div>
       </div>
 
@@ -70,15 +71,7 @@ export default function Settings() {
           {
             key: 'basic',
             label: t('基本'),
-            children: (
-              <SettingsBasicTab
-                {...formProps}
-                scope={scope}
-                setScope={setScope}
-                multi={multi}
-                projectLabel={projectLabel}
-              />
-            ),
+            children: <SettingsBasicTab {...formProps} scope={scope} multi={multi} />,
           },
           {
             key: 'defs',
@@ -98,14 +91,7 @@ export default function Settings() {
           {
             key: 'yaml',
             label: t('YAML 源码'),
-            children: (
-              <SettingsYamlTab
-                scope={scope}
-                setScope={setScope}
-                multi={multi}
-                projectLabel={projectLabel}
-              />
-            ),
+            children: <SettingsYamlTab scope={scope} />,
           },
           {
             key: 'about',

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, App as AntApp, Button, Card, Segmented, Space, Spin, Typography } from 'antd'
+import { Alert, App as AntApp, Button, Card, Space, Spin, Typography } from 'antd'
 
 import { api } from '../api'
 import { useApp } from '../context'
@@ -8,12 +8,9 @@ import type { Scope } from './SettingsShared'
 
 interface Props {
   scope: Scope
-  setScope: (s: Scope) => void
-  multi: boolean
-  projectLabel: string
 }
 
-export default function SettingsYamlTab({ scope, setScope, multi, projectLabel }: Props) {
+export default function SettingsYamlTab({ scope }: Props) {
   const { reload } = useApp()
   const { message } = AntApp.useApp()
 
@@ -58,15 +55,9 @@ export default function SettingsYamlTab({ scope, setScope, multi, projectLabel }
     }
   }
 
-  const scopeOptions = [
-    { label: t('仓库级'), value: 'repo' },
-    ...(multi ? [{ label: t('当前项目：{name}', { name: projectLabel }), value: 'project' }] : []),
-  ]
-
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
-        <Segmented value={scope} onChange={(v) => setScope(v as Scope)} options={scopeOptions} />
         <span style={{ flex: 1 }} />
         <Button onClick={load} disabled={loading}>
           {t('重新加载')}

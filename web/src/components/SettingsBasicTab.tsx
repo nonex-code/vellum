@@ -1,23 +1,10 @@
 import { useState } from 'react'
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Card,
-  Divider,
-  Input,
-  Popconfirm,
-  Segmented,
-  Select,
-  Space,
-  Switch,
-  Typography,
-} from 'antd'
+import { Alert, App as AntApp, Button, Card, Divider, Input, Popconfirm, Select, Space, Switch, Typography } from 'antd'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import type { Modules, Schema } from '../types'
+import type { Modules, ProjectMeta, Schema } from '../types'
 import type { Scope } from './SettingsShared'
 import { SaveBar } from './SettingsCommon'
 
@@ -25,9 +12,7 @@ interface Props {
   draft: Schema
   onChange: (next: Schema) => void
   scope: Scope
-  setScope: (s: Scope) => void
   multi: boolean
-  projectLabel: string
   saving: boolean
   onSave: () => void
 }
@@ -54,16 +39,7 @@ function subtaskOptions() {
   ]
 }
 
-export default function SettingsBasicTab({
-  draft,
-  onChange,
-  scope,
-  setScope,
-  multi,
-  projectLabel,
-  saving,
-  onSave,
-}: Props) {
+export default function SettingsBasicTab({ draft, onChange, scope, multi, saving, onSave }: Props) {
   const { repo, reload } = useApp()
   const { message } = AntApp.useApp()
   const [converting, setConverting] = useState(false)
@@ -96,7 +72,6 @@ export default function SettingsBasicTab({
       await api.switchMode(mode)
       await reload()
       message.success(mode === 'multi' ? t('已转为多项目模式') : t('已转为单项目模式'))
-      if (mode === 'single') setScope('repo')
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -104,43 +79,55 @@ export default function SettingsBasicTab({
     }
   }
 
-  const scopeOptions = [
-    { label: t('仓库级'), value: 'repo' },
-    ...(multi ? [{ label: t('当前项目：{name}', { name: projectLabel }), value: 'project' }] : []),
-  ]
+  const isProject = scope === 'project'
+  const project = draft.project
+
+  function setProjectMeta(patch: Partial<ProjectMeta>) {
+    const base = project || { id: repo.currentProject || '', name: '', description: '' }
+    onChange({ ...draft, project: { ...base, ...patch } })
+  }
 
   return (
     <div>
-      <Card size="small" style={{ marginBottom: 18 }} title={t('编辑作用域')}>
-        <Segmented
-          value={scope}
-          onChange={(v) => setScope(v as Scope)}
-          options={scopeOptions}
-          style={{ marginBottom: 10 }}
-        />
-        <Typography.Paragraph type="secondary" style={{ fontSize: 13, margin: 0 }}>
-          {scope === 'repo'
-            ? t('写入仓库根 workbench.yaml，对所有项目生效（内置默认之上的一层）。')
-            : t('写入 projects/{path}/workbench.yaml，仅覆盖当前项目。', {
-                path: draft.project?.id || projectLabel,
-              })}
-        </Typography.Paragraph>
-      </Card>
-
-      <Card size="small" title={t('工作台信息')} style={{ marginBottom: 18 }}>
+      <Card size="small" title={isProject ? t('项目信息') : t('工作台信息')} style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 260px' }}>
-            <div className="section-label" style={{ margin: '0 0 6px' }}>
-              {t('工作台名称')}
+          {isProject ? (
+            <>
+              <div style={{ flex: '1 1 260px' }}>
+                <div className="section-label" style={{ margin: '0 0 6px' }}>
+                  {t('项目名称')}
+                </div>
+                <Input
+                  value={project?.name || ''}
+                  onChange={(e) => setProjectMeta({ name: e.target.value })}
+                  placeholder={t('我的项目')}
+                />
+              </div>
+              <div style={{ flex: '2 1 360px' }}>
+                <div className="section-label" style={{ margin: '0 0 6px' }}>
+                  {t('项目简介')}
+                </div>
+                <Input
+                  value={project?.description || ''}
+                  onChange={(e) => setProjectMeta({ description: e.target.value })}
+                  placeholder={t('一句话说明这个项目（可选）')}
+                />
+              </div>
+            </>
+          ) : (
+            <div style={{ flex: '1 1 260px' }}>
+              <div className="section-label" style={{ margin: '0 0 6px' }}>
+                {t('工作台名称')}
+              </div>
+              <Input
+                value={draft.workspace.name}
+                onChange={(e) =>
+                  onChange({ ...draft, workspace: { ...draft.workspace, name: e.target.value } })
+                }
+                placeholder={t('我的工作台')}
+              />
             </div>
-            <Input
-              value={draft.workspace.name}
-              onChange={(e) =>
-                onChange({ ...draft, workspace: { ...draft.workspace, name: e.target.value } })
-              }
-              placeholder={t('我的工作台')}
-            />
-          </div>
+          )}
           <div style={{ flex: '0 1 200px' }}>
             <div className="section-label" style={{ margin: '0 0 6px' }}>
               {t('ID 前缀')}
@@ -212,7 +199,8 @@ export default function SettingsBasicTab({
         </div>
       </Card>
 
-      <Card size="small" title={t('单 / 多项目模式转换')}>
+      {!isProject && (
+        <Card size="small" title={t('单 / 多项目模式转换')}>
         <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
           {t('当前模式：')}
           <strong>{currentMode === 'multi' ? t('多项目（项目集）') : t('单项目')}</strong>
@@ -255,7 +243,8 @@ export default function SettingsBasicTab({
             '如需配置事件回调 webhook（url / events）等未在此表单的字段，请到「YAML 源码」标签直接编辑仓库内的 workbench.yaml。',
           )}
         />
-      </Card>
+        </Card>
+      )}
 
       <SaveBar saving={saving} onSave={onSave} note={t('表单保存会以当前生效配置为基线，写回所选作用域的 workbench.yaml')} />
     </div>

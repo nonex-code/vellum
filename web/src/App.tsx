@@ -150,6 +150,7 @@ export default function App() {
                 {schema.modules.board && <Route path="/programs/board" element={<Board />} />}
                 {schema.modules.gantt && <Route path="/programs/gantt" element={<Gantt />} />}
                 {schema.modules.search && <Route path="/programs/search" element={<Search />} />}
+                <Route path="/programs/settings" element={<Settings />} />
                 <Route path="/p/:pid/*" element={<ProjectRoutes />} />
                 <Route path="*" element={<Navigate to={projectPath(defaultPid, '/')} replace />} />
               </Routes>
