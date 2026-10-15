@@ -52,29 +52,41 @@ func doneCatFunc(cfg model.Config) func(string) bool {
 	}
 }
 
-// aggregateGantt 在项目集层面按项目分组，每组的 items 带上所属项目 id。
-func (s *Server) aggregateGantt() []ganttGroup {
+// ganttFor 按项目分组返回时间轴数据：pid 为根项目时展开子项目，其余只取自身。
+func (s *Server) ganttFor(pid string) []ganttGroup {
 	s.mu.RLock()
 	repoRoot, repo := s.repoRoot, s.repo
 	s.mu.RUnlock()
 	groups := []ganttGroup{}
-	ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
-	if err != nil {
-		return groups
+	ids := []string{pid}
+	if pid == RootPID {
+		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+		if err == nil {
+			var children []string
+			for _, e := range ents {
+				if e.IsDir() {
+					children = append(children, e.Name())
+				}
+			}
+			sort.Strings(children)
+			ids = append(ids, children...)
+		}
 	}
-	for _, e := range ents {
-		if !e.IsDir() {
-			continue
-		}
-		pdir := filepath.Join(repoRoot, "projects", e.Name())
-		if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
-			continue
-		}
-		pcfg, err := config.LoadFor(repoRoot, e.Name())
+	for _, id := range ids {
+		dir, err := resolveProjectDir(repoRoot, id)
 		if err != nil {
 			continue
 		}
-		st := store.New(pdir, pcfg.IDPrefix, repo, false)
+		if id != RootPID {
+			if _, err := os.Stat(filepath.Join(dir, ".archived")); err == nil {
+				continue // 归档项目不参与聚合
+			}
+		}
+		pcfg, err := config.LoadFor(repoRoot, configPid(id))
+		if err != nil {
+			continue
+		}
+		st := store.New(dir, pcfg.IDPrefix, repo, false)
 		issues, err := st.ListIssues()
 		if err != nil {
 			continue
@@ -84,7 +96,7 @@ func (s *Server) aggregateGantt() []ganttGroup {
 		var minStart, maxEnd string
 		for _, iss := range issues {
 			items = append(items, ganttItem{ID: iss.ID, Title: iss.Title, Status: iss.Status, Done: doneCat(iss.Status),
-				Priority: iss.Priority, Assignee: iss.Assignee, Start: iss.Start, Due: iss.Due, Project: e.Name()})
+				Priority: iss.Priority, Assignee: iss.Assignee, Start: iss.Start, Due: iss.Due, Project: id})
 			if iss.Start != "" && (minStart == "" || iss.Start < minStart) {
 				minStart = iss.Start
 			}
@@ -92,19 +104,24 @@ func (s *Server) aggregateGantt() []ganttGroup {
 				maxEnd = iss.Due
 			}
 		}
-		name := e.Name()
-		if pcfg.Project.Name != "" {
+		if len(items) == 0 {
+			continue // 没有任务的项目不出现在时间轴上
+		}
+		name := id
+		if id == RootPID {
+			name = pcfg.Workspace.Name
+		} else if pcfg.Project.Name != "" {
 			name = pcfg.Project.Name
 		}
-		groups = append(groups, ganttGroup{ID: e.Name(), Name: name, Start: minStart, End: maxEnd, Items: items})
+		groups = append(groups, ganttGroup{ID: id, Name: name, Start: minStart, End: maxEnd, Items: items})
 	}
 	return groups
 }
 
-// handleGantt 返回按里程碑分组的时间轴数据（含未排期组）；项目集作用域下按项目分组。
+// handleGantt 返回按里程碑分组的时间轴数据（含未排期组）；项目树聚合作用域下按项目分组。
 func (s *Server) handleGantt(w http.ResponseWriter, r *http.Request) {
-	if isAggregate(s.reqProject(r)) && s.isMulti() {
-		writeJSON(w, map[string]any{"groups": s.aggregateGantt()})
+	if s.reqInclude(r) && s.isMulti() {
+		writeJSON(w, map[string]any{"groups": s.ganttFor(s.reqProject(r))})
 		return
 	}
 	st, cfg, err := s.storeFor(r)
@@ -237,9 +254,7 @@ func isOverdue(due, today string) bool {
 // handleProjectStats 返回项目集下各项目概况（含归档）。
 func (s *Server) handleProjectStats(w http.ResponseWriter, r *http.Request) {
 	_, repoRoot, _ := s.snapshot()
-	s.mu.RLock()
-	cur := s.projectID
-	s.mu.RUnlock()
+	cur := s.reqProject(r)
 	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)
 		return
@@ -635,15 +650,12 @@ const rawConfigTemplate = `# Vellum 配置（跟随仓库/项目走，脱离平�
 func (s *Server) handleConfigRawGet(w http.ResponseWriter, r *http.Request) {
 	scope := r.URL.Query().Get("scope")
 	_, repoRoot, _ := s.snapshot()
-	extraPID := s.explicitProject(r)
+	pid := configPid(s.reqProject(r))
 	s.mu.RLock()
-	pid := s.projectID
 	mode := s.cfg.Workspace.Mode
 	s.mu.RUnlock()
-	if mode != "multi" || isAggregate(extraPID) {
+	if mode != "multi" {
 		pid = ""
-	} else if extraPID != "" {
-		pid = extraPID
 	}
 	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)
@@ -675,16 +687,13 @@ func (s *Server) handleConfigRawPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, repoRoot, _ := s.snapshot()
-	extraPID := s.explicitProject(r)
+	pid := configPid(s.reqProject(r))
 	s.mu.RLock()
-	pid := s.projectID
 	mode := s.cfg.Workspace.Mode
 	repo := s.repo
 	s.mu.RUnlock()
-	if mode != "multi" || isAggregate(extraPID) {
+	if mode != "multi" {
 		pid = ""
-	} else if extraPID != "" {
-		pid = extraPID
 	}
 	if repoRoot == "" {
 		s.err(w, r, 400, i18n.NoRepo)

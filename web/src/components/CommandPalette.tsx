@@ -12,7 +12,7 @@ import {
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope, projectPath, useGo } from '../nav'
+import { ROOT_PID, projectPath, useGo } from '../nav'
 import { openPalette } from '../bus'
 import type { Issue, SearchHit } from '../types'
 import { StatusTag } from './tags'
@@ -33,9 +33,8 @@ export default function CommandPalette({
   open: boolean
   onClose: () => void
 }) {
-  const { schema, repo, projectId } = useApp()
+  const { schema, repo, aggregate: program } = useApp()
   const nav = useGo()
-  const program = isProgramScope(projectId)
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [sel, setSel] = useState(0)
@@ -86,7 +85,7 @@ export default function CommandPalette({
     if (schema.modules.board) list.push({ key: 'board', kind: 'action', icon: <ProjectOutlined />, label: t('看板'), onRun: go('/board') })
     if (schema.modules.gantt) list.push({ key: 'gantt', kind: 'action', icon: <ProjectOutlined />, label: t('甘特图'), onRun: go('/gantt') })
     if (schema.modules.docs && !program) list.push({ key: 'docs', kind: 'action', icon: <SearchOutlined />, label: t('文档'), onRun: go('/docs') })
-    list.push({ key: 'projects', kind: 'action', icon: <HomeOutlined />, label: repo.mode === 'multi' ? t('项目集总览') : t('转为项目集'), onRun: go('/programs') })
+    list.push({ key: 'projects', kind: 'action', icon: <HomeOutlined />, label: repo.mode === 'multi' ? t('项目集总览') : t('转为项目集'), onRun: go(projectPath(ROOT_PID, '/')) })
     if (!program) list.push({ key: 'settings', kind: 'action', icon: <UnorderedListOutlined />, label: t('设置'), onRun: go('/settings') })
     if (schema.modules.search) list.push({ key: 'search', kind: 'action', icon: <SearchOutlined />, label: t('搜索'), onRun: go('/search') })
     if (repo.hasRemote)
@@ -121,7 +120,7 @@ export default function CommandPalette({
     hint: program && h.issue.project ? `${h.issue.project} · ${h.issue.id}` : h.issue.id,
     onRun: () => {
       onClose()
-      if (program) nav(projectPath(h.issue.project || '', `/issue/${h.issue.id}`))
+      if (program) nav(projectPath(h.issue.project || ROOT_PID, `/issue/${h.issue.id}`))
       else nav(`/issue/${h.issue.id}`)
     },
   }))

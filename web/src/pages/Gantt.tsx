@@ -7,7 +7,7 @@ import dayjs from 'dayjs'
 import { api } from '../api'
 import { useApp } from '../context'
 import { intlLocale, t } from '../i18n'
-import { isProgramScope, projectPath } from '../nav'
+import { ROOT_PID, projectPath } from '../nav'
 import type { GanttGroup, GanttItem } from '../types'
 
 type Zoom = 'week' | 'month'
@@ -80,9 +80,8 @@ const CSS = `
 `
 
 export default function Gantt() {
-  const { schema, projectId } = useApp()
+  const { schema, aggregate: program } = useApp()
   const nav = useGo()
-  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [groups, setGroups] = useState<GanttGroup[]>([])
   const [loading, setLoading] = useState(true)
@@ -211,7 +210,7 @@ export default function Gantt() {
   }
 
   function goIssue(it: GanttItem) {
-    if (program) nav(projectPath(it.project || '', `/issue/${it.id}`))
+    if (program) nav(projectPath(it.project || ROOT_PID, `/issue/${it.id}`))
     else nav(`/issue/${it.id}`)
   }
 

@@ -33,7 +33,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { projectPath } from '../nav'
+import { ROOT_PID, projectAggPath, projectPath } from '../nav'
 import type { Issue, ProjectStat } from '../types'
 import { fromNow } from '../util'
 import { StatusTag } from '../components/tags'
@@ -62,11 +62,11 @@ export default function Projects() {
     }
   }, [message])
 
-  // 跨项目聚合的近期任务（program 作用域下请求头是 "*"）。
+  // 跨项目聚合的近期任务（根项目的 include=children 作用域）。
   const loadFocus = useCallback(async () => {
     if (repo.mode !== 'multi') return
     try {
-      const r = await api.listIssues()
+      const r = await api.listIssues({ include: 'children' })
       const list = [...(r.issues || [])].sort((a, b) => (a.updated < b.updated ? 1 : -1))
       setFocus(list.slice(0, 6))
     } catch {
@@ -111,7 +111,7 @@ export default function Projects() {
     try {
       await api.switchMode('single')
       await reload()
-      nav(projectPath('default', '/'))
+      nav(projectPath(ROOT_PID, '/'))
       message.success(t('已合并回单项目'))
     } catch (e) {
       message.error((e as Error).message)
@@ -334,7 +334,7 @@ export default function Projects() {
             <div className="form-section" style={{ margin: 0 }}>
               {t('跨项目动态')}
             </div>
-            <Button type="link" onClick={() => nav('/programs/issues')}>
+            <Button type="link" onClick={() => nav(projectAggPath(ROOT_PID, '/issues'))}>
               {t('查看全部任务')} <RightOutlined style={{ fontSize: 11 }} />
             </Button>
           </div>
@@ -343,7 +343,7 @@ export default function Projects() {
               <div
                 key={`${i.project}-${i.id}`}
                 className="wb-focus-row"
-                onClick={() => nav(projectPath(i.project || '', `/issue/${i.id}`))}
+                onClick={() => nav(projectPath(i.project || ROOT_PID, `/issue/${i.id}`))}
               >
                 <Tag className="project-tag">{i.project}</Tag>
                 <span className="stamp">{i.id}</span>

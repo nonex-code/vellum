@@ -20,7 +20,7 @@ import {
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope, projectPath } from '../nav'
+import { ROOT_PID, projectAggPath, projectPath } from '../nav'
 import type { ProjectMeta, ProjectStat } from '../types'
 import NewProjectModal from './NewProjectModal'
 
@@ -58,15 +58,15 @@ interface ViewDef {
 
 type ProjGroup = 'pinned' | 'plain'
 
-// Sidebar 是常驻的层级导航：项目集（聚合层）→ 项目 → 视图。
-// “向上”只发生在点项目集节点；切项目是一步操作，且回到各项目上次停留的视图。
-// 项目可分「收藏 / 最近 / 项目」，支持拖拽排序与置顶；行尾徽标显示进行中/逾期数量。
+// Sidebar 是常驻的层级导航：项目树（根项目 → 子项目 → 视图）。
+// 根项目展开为聚合层（总览/全部任务…）；子项目展开为自身视图。
+// 子项目可分「收藏 / 全部项目」，支持拖拽排序与置顶；行尾徽标显示进行中/逾期数量。
 export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { schema, repo, reload, projectId, projects } = useApp()
   const loc = useLocation()
   const nav = useNavigate()
   const multi = repo.mode === 'multi'
-  const program = isProgramScope(projectId)
+  const atRoot = projectId === ROOT_PID
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1')
   const [creating, setCreating] = useState(false)
@@ -140,15 +140,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     })
   }
 
-  const programViews: ViewDef[] = [
-    { to: '/programs', label: t('总览'), icon: <ApartmentOutlined />, end: true },
-    { to: '/programs/issues', label: t('全部任务'), icon: <UnorderedListOutlined /> },
-    { to: '/programs/board', label: t('全部看板'), icon: <ProjectOutlined />, show: schema.modules.board },
-    { to: '/programs/gantt', label: t('全部甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
-    { to: '/programs/search', label: t('全部搜索'), icon: <SearchOutlined />, show: schema.modules.search },
-    { to: '/programs/settings', label: t('设置'), icon: <SettingOutlined /> },
-  ]
-
   function projectViews(id: string): ViewDef[] {
     const all: ViewDef[] = [
       { to: projectPath(id, '/issues'), label: t('任务'), icon: <UnorderedListOutlined /> },
@@ -161,12 +152,27 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     return all.filter((v) => v.show !== false)
   }
 
+  // 根项目的展开视图：multi 下是聚合层，single 下就是自身的普通视图。
+  const rootViews: ViewDef[] = multi
+    ? [
+        { to: projectPath(ROOT_PID, '/'), label: t('总览'), icon: <ApartmentOutlined />, end: true },
+        { to: projectAggPath(ROOT_PID, '/issues'), label: t('全部任务'), icon: <UnorderedListOutlined /> },
+        { to: projectAggPath(ROOT_PID, '/board'), label: t('全部看板'), icon: <ProjectOutlined />, show: schema.modules.board },
+        { to: projectAggPath(ROOT_PID, '/gantt'), label: t('全部甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
+        { to: projectAggPath(ROOT_PID, '/search'), label: t('全部搜索'), icon: <SearchOutlined />, show: schema.modules.search },
+        { to: projectPath(ROOT_PID, '/settings'), label: t('设置'), icon: <SettingOutlined /> },
+      ]
+    : [
+        { to: projectPath(ROOT_PID, '/'), label: t('首页'), icon: <HomeOutlined />, end: true },
+        ...projectViews(ROOT_PID),
+      ]
+
   const cls =
     (base: string) =>
     ({ isActive }: { isActive: boolean }) =>
       base + (isActive ? ' active' : '')
 
-  // ---- 项目分组：收藏 / 最近 / 项目 ----
+  // ---- 项目分组：收藏 / 全部项目 ----
   const byId = useMemo(() => {
     const m = new Map<string, ProjectMeta>()
     for (const p of projects || []) m.set(p.id, p)
@@ -219,7 +225,7 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
   }
 
   function renderProject(p: ProjectMeta, group: ProjGroup) {
-    const active = !program && p.id === projectId
+    const active = p.id === projectId
     const st = stats[p.id]
     const doing = st?.doing ?? 0
     const overdue = st?.overdue ?? 0
@@ -302,27 +308,38 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     <>
       <aside className={'sidebar' + (collapsed ? ' collapsed' : '')}>
         <div className="sb-scroll">
-          {/* 项目集节点：点它就是“回上一层” */}
-          <NavLink to="/programs" end title={workspaceName} className={cls('sb-program')}>
+          {/* 项目树根节点：仓库本身，也是聚合层的入口 */}
+          <NavLink
+            to={projectPath(ROOT_PID, '/')}
+            end
+            title={workspaceName}
+            className={cls('sb-program') + (atRoot ? ' active' : '')}
+          >
             <span className="sb-logo">
               <ApartmentOutlined />
             </span>
             <span className="sb-text sb-program-name">{workspaceName}</span>
           </NavLink>
 
-          {/* 聚合层：跨项目视图 */}
+          {/* 根项目视图：multi 下为聚合层（全部任务…），single 下为自身的普通视图 */}
           <div className="sb-views">
-            {programViews
+            {rootViews
               .filter((v) => v.show !== false)
               .map((v) => (
-                <NavLink key={v.to} to={v.to} end={v.end} title={v.label} className={cls('sb-item sb-program-item')}>
+                <NavLink
+                  key={v.to}
+                  to={v.to}
+                  end={v.end}
+                  title={v.label}
+                  className={cls('sb-item sb-program-item')}
+                >
                   <span className="sb-ico">{v.icon}</span>
                   <span className="sb-text">{v.label}</span>
                 </NavLink>
               ))}
           </div>
 
-          {multi ? (
+          {multi && (
             <>
               {pinnedList.length > 0 && (
                 <>
@@ -343,30 +360,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
               <button className="sb-add" onClick={() => setCreating(true)} title={t('新建项目')}>
                 <PlusOutlined /> <span className="sb-text">{t('新建项目')}</span>
               </button>
-            </>
-          ) : (
-            <>
-              <div className="sb-sep" />
-              <div className="sb-views">
-                <NavLink to={projectPath(projectId, '/')} end title={t('首页')} className={cls('sb-item')}>
-                  <span className="sb-ico">
-                    <HomeOutlined />
-                  </span>
-                  <span className="sb-text">{t('首页')}</span>
-                </NavLink>
-                {projectViews(projectId).map((v) => (
-                  <NavLink key={v.to} to={v.to} end={v.end} title={v.label} className={cls('sb-item')}>
-                    <span className="sb-ico">{v.icon}</span>
-                    <span className="sb-text">{v.label}</span>
-                  </NavLink>
-                ))}
-                <NavLink to="/programs" title={t('转为项目集')} className={cls('sb-item')}>
-                  <span className="sb-ico">
-                    <ApartmentOutlined />
-                  </span>
-                  <span className="sb-text">{t('转为项目集')}</span>
-                </NavLink>
-              </div>
             </>
           )}
         </div>

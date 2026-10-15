@@ -4,7 +4,7 @@ import { App as AntApp, Tabs } from 'antd'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope } from '../nav'
+import { ROOT_PID } from '../nav'
 import type { Schema } from '../types'
 import { type Scope, clone, collectIdIssues, managedKeys, toYaml } from '../components/SettingsShared'
 import SettingsBasicTab from '../components/SettingsBasicTab'
@@ -21,7 +21,7 @@ export default function Settings() {
   const multi = repo.mode === 'multi'
   // 设置的职责由所在位置决定：项目集节点下 = 仓库级（项目集默认）；项目下 = 项目级（仅覆盖本项目）。
   // 单项目模式没有项目级概念，恒为仓库级。
-  const program = !multi || isProgramScope(projectId)
+  const program = !multi || projectId === ROOT_PID
   const scope: Scope = program ? 'repo' : 'project'
 
   const [draft, setDraft] = useState<Schema>(() => clone(schema))

@@ -7,7 +7,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope, projectPath, useGo } from '../nav'
+import { ROOT_PID, projectPath, useGo } from '../nav'
 import type { Issue, IssueNode } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
@@ -28,9 +28,8 @@ function toTree(issues: Issue[]): IssueNode[] {
 }
 
 export default function IssueList() {
-  const { schema, projects, projectId } = useApp()
+  const { schema, repo, projects, aggregate: program } = useApp()
   const nav = useGo()
-  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [data, setData] = useState<Issue[]>([])
   const [loading, setLoading] = useState(false)
@@ -43,6 +42,14 @@ export default function IssueList() {
   const [milestone, setMilestone] = useState(searchParams.get('milestone') || '')
   const [sort, setSort] = useState(searchParams.get('sort') || 'updated')
   const [tree, setTree] = useState(searchParams.get('tree') === '1')
+  const include = searchParams.get('include') || ''
+
+  // 聚合视图中展示的任务属于哪个项目（根项目用工作台名）。
+  const projectName = (id?: string) => {
+    if (!id) return ''
+    if (id === ROOT_PID) return repo.project?.name || schema.workspace.name
+    return projects.find((p) => p.id === id)?.name || id
+  }
 
   const params = useMemo(() => {
     const p: Record<string, string> = {}
@@ -54,8 +61,9 @@ export default function IssueList() {
     if (milestone) p.milestone = milestone
     if (sort) p.sort = sort
     if (tree) p.tree = '1'
+    if (include) p.include = include
     return p
-  }, [q, status, priority, type, label, milestone, sort, tree])
+  }, [q, status, priority, type, label, milestone, sort, tree, include])
 
   useEffect(() => {
     const next = new URLSearchParams(params).toString()
@@ -82,7 +90,7 @@ export default function IssueList() {
             title: t('项目'),
             dataIndex: 'project',
             width: 130,
-            render: (v: string) => <Tag className="project-tag">{v}</Tag>,
+            render: (v: string) => <Tag className="project-tag">{projectName(v)}</Tag>,
           } as ColumnsType<IssueNode>[number],
         ]
       : []),
@@ -116,10 +124,10 @@ export default function IssueList() {
     { title: t('更新'), dataIndex: 'updated', width: 100, render: (v) => <span className="mono">{fromNow(v)}</span> },
   ]
 
-  const filtered = Object.keys(params).length > 0
+  const filtered = Object.keys(params).some((k) => k !== 'include')
   const source = tree && !program ? toTree(data) : data
   const openIssue = (r: Issue) =>
-    program ? nav(projectPath(r.project || '', `/issue/${r.id}`)) : nav(`/issue/${r.id}`)
+    program ? nav(projectPath(r.project || ROOT_PID, `/issue/${r.id}`)) : nav(`/issue/${r.id}`)
 
   return (
     <>

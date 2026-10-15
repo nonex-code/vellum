@@ -4,7 +4,6 @@ import remarkGfm from 'remark-gfm'
 
 import { Ctx } from '../context'
 import { t } from '../i18n'
-import { isProgramScope } from '../nav'
 import { useThemeCtx } from '../theme-context'
 
 // 把仓库内的相对引用（files/...）改写到 /api/files/{issueId}/... ，
@@ -110,7 +109,7 @@ interface Props {
 
 export default function Markdown({ children, issueId, onToggleCheckbox }: Props) {
   const pid = useContext(Ctx)?.projectId
-  const project = pid && !isProgramScope(pid) ? `?project=${encodeURIComponent(pid)}` : ''
+  const project = pid ? `?project=${encodeURIComponent(pid)}` : ''
   return (
     <div className="md">
       <ReactMarkdown

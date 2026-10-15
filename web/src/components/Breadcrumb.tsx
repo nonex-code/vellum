@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { PROGRAM_PID, isProgramScope, projectPath } from '../nav'
+import { ROOT_PID, projectPath } from '../nav'
 
 // labelFor 把项目内的相对路径段映射成面包屑文案。
 function labelFor(rest: string): string | null {
@@ -35,34 +35,30 @@ export default function Breadcrumb() {
   const loc = useLocation()
 
   const multi = repo.mode === 'multi'
-  const programName = repo.project?.name || 'Vellum'
-  const projectName =
-    project?.name || (multi ? projects.find((p) => p.id === projectId)?.name || projectId : programName)
+  const rootName = repo.project?.name || 'Vellum'
+  const atRoot = projectId === ROOT_PID
 
   const items: { title: React.ReactNode }[] = []
 
-  if (isProgramScope(projectId)) {
-    items.push({ title: <Link to="/programs">{t('项目集总览')}</Link> })
-    const tail = loc.pathname.replace(/^\/programs/, '')
-    const label = labelFor(tail)
+  if (atRoot) {
+    // 根项目：multi 下是项目集总览；single 下仓库本身就是项目。
+    items.push({
+      title: multi ? <Link to={projectPath(ROOT_PID, '/')}>{t('项目集总览')}</Link> : rootName,
+    })
+    const label = labelFor(loc.pathname.replace(/^\/p\/[^/]+/, ''))
     if (label) items.push({ title: label })
   } else {
-    // 单项目模式：仓库本身就是项目，只显示工作台名。
-    if (multi) {
-      items.push({
-        title: <Link to="/programs">{programName}</Link>,
-      })
-      const atProjectRoot = /^\/p\/[^/]+\/?$/.test(loc.pathname)
-      items.push({
-        title: atProjectRoot ? (
-          projectName
-        ) : (
-          <Link to={projectPath(projectId, '/')}>{projectName}</Link>
-        ),
-      })
-    } else {
-      items.push({ title: programName })
-    }
+    const projectName =
+      project?.name || projects.find((p) => p.id === projectId)?.name || projectId
+    items.push({ title: <Link to={projectPath(ROOT_PID, '/')}>{rootName}</Link> })
+    const atProjectRoot = /^\/p\/[^/]+\/?$/.test(loc.pathname)
+    items.push({
+      title: atProjectRoot ? (
+        projectName
+      ) : (
+        <Link to={projectPath(projectId, '/')}>{projectName}</Link>
+      ),
+    })
     const rest = loc.pathname.replace(/^\/p\/[^/]+/, '')
     const label = labelFor(rest)
     if (label) items.push({ title: label })

@@ -4,7 +4,7 @@ import { App as AntApp, Empty, Input, List, Space, Tag } from 'antd'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope, projectPath, useGo } from '../nav'
+import { ROOT_PID, projectPath, useGo } from '../nav'
 import type { SearchHit } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
@@ -31,8 +31,7 @@ function highlight(text: string, q: string) {
 
 export default function Search() {
   const nav = useGo()
-  const { schema, projectId } = useApp()
-  const program = isProgramScope(projectId)
+  const { schema, aggregate: program } = useApp()
   const { message } = AntApp.useApp()
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
@@ -125,7 +124,7 @@ export default function Search() {
             style={{ cursor: 'pointer', alignItems: 'flex-start' }}
             onClick={() =>
               program
-                ? nav(projectPath(h.issue.project || '', `/issue/${h.issue.id}`))
+                ? nav(projectPath(h.issue.project || ROOT_PID, `/issue/${h.issue.id}`))
                 : nav(`/issue/${h.issue.id}`)
             }
           >

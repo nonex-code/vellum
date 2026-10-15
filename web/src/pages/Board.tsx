@@ -5,15 +5,14 @@ import { useGo } from '../nav'
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { isProgramScope, projectPath } from '../nav'
+import { ROOT_PID, projectPath } from '../nav'
 import type { Issue } from '../types'
 import { fromNow } from '../util'
 import { PriorityText, StatusTag } from '../components/tags'
 
 export default function Board() {
-  const { schema, projectId } = useApp()
+  const { schema, aggregate: program } = useApp()
   const nav = useGo()
-  const program = isProgramScope(projectId)
   const { message } = AntApp.useApp()
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,7 +78,7 @@ export default function Board() {
   const labelDef = (id: string) => schema.labels.find((l) => l.id === id)
   const cardKey = (i: Issue) => (program ? `${i.project}:${i.id}` : i.id)
   const openCard = (i: Issue) =>
-    program ? nav(projectPath(i.project || '', `/issue/${i.id}`)) : nav(`/issue/${i.id}`)
+    program ? nav(projectPath(i.project || ROOT_PID, `/issue/${i.id}`)) : nav(`/issue/${i.id}`)
 
   if (loading) {
     return (

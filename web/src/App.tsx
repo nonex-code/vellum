@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Spin } from 'antd'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
-import { api, setApiProject } from './api'
+import { api, setApiScope } from './api'
 import { Ctx, useApp } from './context'
 import { PALETTE_EVENT } from './bus'
 import { applyRepoDefault } from './i18n'
-import { SINGLE_PID, PROGRAM_PID, isProgramScope, parseProjectId, projectPath } from './nav'
+import { ROOT_PID, parseProjectId, projectAggPath, projectPath } from './nav'
 import type { ProjectMeta, RepoInfo, Schema } from './types'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
@@ -31,6 +31,9 @@ function isTyping(el: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable
 }
 
+// 旧的 /programs 子视图名，迁到根项目时要带上 include=children 才是聚合视图。
+const AGG_VIEWS = new Set(['issues', 'board', 'gantt', 'search'])
+
 export default function App() {
   const [repo, setRepo] = useState<RepoInfo | null>(null)
   const [schema, setSchema] = useState<Schema | null>(null)
@@ -40,18 +43,18 @@ export default function App() {
   const nav = useNavigate()
 
   const multi = repo?.mode === 'multi'
-  const defaultPid = multi
-    ? repo?.currentProject || repo?.projects?.[0]?.id || 'main'
-    : SINGLE_PID
-
-  // URL 是项目上下文的唯一真相；programs/* 恒为项目集作用域。
   const parsed = parseProjectId(loc.pathname)
-  const projectId = parsed === PROGRAM_PID ? PROGRAM_PID : multi ? parsed ?? defaultPid : SINGLE_PID
-  // 渲染期同步 API 项目头，保证子页面首次请求就落在正确项目上。
-  setApiProject(multi ? projectId : '')
+  // URL 是项目上下文的唯一真相；项目树根项目为 ROOT_PID，single 模式恒为根项目。
+  const projectId = multi ? parsed ?? ROOT_PID : ROOT_PID
+  // 聚合视图 = 根项目 + include=children（“全部任务/看板/甘特/搜索”）。
+  const includeChildren = new URLSearchParams(loc.search).get('include') === 'children'
+  const aggregate = multi && projectId === ROOT_PID && includeChildren
 
-  // 旧的无项目前缀链接（#/issues、#/issue/WB-1 …）重定向到当前项目的同名页面。
-  const legacy = !loc.pathname.startsWith('/p/') && !loc.pathname.startsWith('/programs')
+  // 渲染期同步 API 作用域头，保证子页面首次请求就落在正确项目上。
+  setApiScope(multi ? projectId : '', aggregate)
+
+  // 旧的无项目前缀链接（#/issues、#/issue/WB-1、#/programs…）重定向到项目树路径。
+  const legacy = !loc.pathname.startsWith('/p/')
 
   const applySchema = useCallback((sc: Schema) => {
     setSchema(sc)
@@ -101,8 +104,8 @@ export default function App() {
       if (isTyping(e.target) || paletteOpen) return
       if (e.key === 'n') {
         e.preventDefault()
-        // 项目集作用域没有「项目」可写，跳到全部任务页由用户选项目新建。
-        nav(isProgramScope(projectId) ? '/programs/issues' : projectPath(projectId, '/new'))
+        // 聚合视图没有单一项目可写，跳到全部任务页由用户选项目新建。
+        nav(aggregate ? projectAggPath(projectId, '/issues') : projectPath(projectId, '/new'))
       }
     }
     const onOpen = () => setPaletteOpen(true)
@@ -112,7 +115,7 @@ export default function App() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener(PALETTE_EVENT, onOpen)
     }
-  }, [nav, paletteOpen, projectId])
+  }, [nav, paletteOpen, projectId, aggregate])
 
   if (loading) {
     return (
@@ -127,16 +130,26 @@ export default function App() {
   }
 
   if (legacy) {
-    // 旧的「项目集/组织形式」入口迁到新的项目集总览。
-    if (loc.pathname === '/projects') return <Navigate to="/programs" replace />
-    return <Navigate to={projectPath(defaultPid, loc.pathname) + loc.search} replace />
+    // 旧「项目集」入口迁到项目树根项目；其余旧链接归到当前项目。
+    const legacyPid = multi ? repo.currentProject || ROOT_PID : ROOT_PID
+    let to: string
+    if (loc.pathname === '/projects' || loc.pathname === '/programs') {
+      to = projectPath(ROOT_PID, '/')
+    } else if (loc.pathname.startsWith('/programs/')) {
+      const rest = loc.pathname.slice('/programs'.length)
+      const seg = rest.replace(/^\//, '')
+      to = AGG_VIEWS.has(seg) ? projectAggPath(ROOT_PID, rest) : projectPath(ROOT_PID, rest)
+    } else {
+      to = projectPath(legacyPid, loc.pathname)
+    }
+    return <Navigate to={to + loc.search} replace />
   }
 
   const projects: ProjectMeta[] = repo.projects || []
   const project = multi ? projects.find((p) => p.id === projectId) : repo.projectMeta
 
   return (
-    <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects }}>
+    <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects, aggregate }}>
       <div className="app-shell">
         <TopBar />
         <div className="app-body">
@@ -145,14 +158,8 @@ export default function App() {
             <Breadcrumb />
             <div className="page" key={loc.pathname + loc.search}>
               <Routes>
-                <Route path="/programs" element={<Projects />} />
-                <Route path="/programs/issues" element={<IssueList />} />
-                {schema.modules.board && <Route path="/programs/board" element={<Board />} />}
-                {schema.modules.gantt && <Route path="/programs/gantt" element={<Gantt />} />}
-                {schema.modules.search && <Route path="/programs/search" element={<Search />} />}
-                <Route path="/programs/settings" element={<Settings />} />
                 <Route path="/p/:pid/*" element={<ProjectRoutes />} />
-                <Route path="*" element={<Navigate to={projectPath(defaultPid, '/')} replace />} />
+                <Route path="*" element={<Navigate to={projectPath(ROOT_PID, '/')} replace />} />
               </Routes>
             </div>
           </main>
@@ -163,12 +170,13 @@ export default function App() {
   )
 }
 
-// ProjectRoutes 是项目工作台内的视图；项目 id 由 App 从 URL 统一解析。
+// ProjectRoutes 是项目树节点内的视图；根项目在 multi 模式下首屏是项目集总览。
 function ProjectRoutes() {
-  const { schema } = useApp()
+  const { schema, repo, projectId } = useApp()
+  const rootOverview = projectId === ROOT_PID && repo.mode === 'multi'
   return (
     <Routes>
-      <Route index element={<Home />} />
+      <Route index element={rootOverview ? <Projects /> : <Home />} />
       <Route path="issues" element={<IssueList />} />
       {schema.modules.board && <Route path="board" element={<Board />} />}
       {schema.modules.search && <Route path="search" element={<Search />} />}

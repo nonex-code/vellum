@@ -375,15 +375,18 @@ func (s *Server) snapshot() (model.Config, string, *gitrepo.Repo) {
 	return s.projCfg, s.repoRoot, s.repo
 }
 
-// reqProject 解析请求要操作的项目：查询参数 project / 请求头 X-WB-Project 优先，
-// 其次回落到服务端当前项目。"*" 表示跨项目聚合（仅读接口支持）。
-// 这样 URL 就是项目上下文的唯一真相，服务端 projectID 退化为默认值/回退。
+// reqProject 解析请求要操作的项目 id：查询参数 project / 请求头 X-WB-Project 优先，
+// 其次回落到服务端当前项目，最后回落到项目树的根项目 "~"。
+// 兼容旧的聚合 id "*"/"all"：一律视为根项目（配合 reqInclude 展开子项目）。
 func (s *Server) reqProject(r *http.Request) string {
 	p := s.explicitProject(r)
 	if p == "" {
 		s.mu.RLock()
 		p = s.projectID
 		s.mu.RUnlock()
+	}
+	if p == "" || isAggregate(p) {
+		return RootPID
 	}
 	return p
 }
@@ -404,9 +407,21 @@ func (s *Server) explicitProject(r *http.Request) string {
 	return h
 }
 
-// isAggregate 判断请求是否要跨项目聚合。
+// isAggregate 兼容旧接口：project=* / all 表示「根项目 + 含子项目」。
 func isAggregate(pid string) bool {
 	return pid == "*" || pid == "all"
+}
+
+// reqInclude 判断读请求是否要包含子项目（项目树聚合视图，如“全部任务”）。
+// 显式 include=children（查询参数或请求头），或兼容旧聚合 id "*"/"all"。
+func (s *Server) reqInclude(r *http.Request) bool {
+	if strings.Contains(r.URL.Query().Get("include"), "children") {
+		return true
+	}
+	if strings.Contains(r.Header.Get("X-WB-Include"), "children") {
+		return true
+	}
+	return isAggregate(s.explicitProject(r))
 }
 
 // isMulti 返回当前仓库是否处于项目集（多项目）模式。
@@ -416,16 +431,43 @@ func (s *Server) isMulti() bool {
 	return s.cfg.Workspace.Mode == "multi"
 }
 
-// rejectAggregate 拦截跨项目聚合作用域下的写操作：聚合视图只读。
-func (s *Server) rejectAggregate(w http.ResponseWriter, r *http.Request) bool {
-	if isAggregate(s.reqProject(r)) {
-		s.err(w, r, 400, i18n.ReadOnlyScope)
-		return true
+// RootPID 是项目树根项目的保留 id，映射到仓库根目录（可与 projects/ 下的子项目并存）。
+const RootPID = "~"
+
+// resolveProjectDir 把项目 id 映射到磁盘目录：根项目 "~"/空 → 仓库根。
+func resolveProjectDir(repoRoot, pid string) (string, error) {
+	if pid == "" || pid == RootPID {
+		return repoRoot, nil
 	}
-	return false
+	dir := filepath.Join(repoRoot, "projects", pid)
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return "", i18n.New(i18n.ProjectNotFound, pid)
+	}
+	return dir, nil
+}
+
+// configPid 把根项目映射为空 id，使配置继承从仓库根 workbench.yaml 起。
+func configPid(pid string) string {
+	if pid == RootPID {
+		return ""
+	}
+	return pid
+}
+
+// fillRootMeta 为根项目补上项目元信息（仓库级未写 project 段时用工作台名）。
+func fillRootMeta(cfg *model.Config, pid string) {
+	if pid != RootPID {
+		return
+	}
+	if cfg.Project.Name == "" {
+		cfg.Project = model.ProjectMeta{ID: RootPID, Name: cfg.Workspace.Name}
+	} else if cfg.Project.ID == "" {
+		cfg.Project.ID = RootPID
+	}
 }
 
 // projectScope 返回请求项目对应的 issues 根目录、生效配置与 git 仓库。
+// 根项目落在仓库根；子项目落在 projects/<id>。single 模式恒为根项目。
 func (s *Server) projectScope(r *http.Request) (string, model.Config, *gitrepo.Repo, error) {
 	s.mu.RLock()
 	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
@@ -434,21 +476,18 @@ func (s *Server) projectScope(r *http.Request) (string, model.Config, *gitrepo.R
 		return "", model.Config{}, nil, i18n.New(i18n.NoRepo)
 	}
 	pid := s.reqProject(r)
-	if mode != "multi" || isAggregate(pid) {
-		pid = ""
+	if mode != "multi" {
+		pid = RootPID
 	}
-	root := repoRoot
-	if pid != "" {
-		dir := filepath.Join(repoRoot, "projects", pid)
-		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-			return "", model.Config{}, nil, i18n.New(i18n.ProjectNotFound, pid)
-		}
-		root = dir
-	}
-	cfg, err := config.LoadFor(repoRoot, pid)
+	root, err := resolveProjectDir(repoRoot, pid)
 	if err != nil {
 		return "", model.Config{}, nil, err
 	}
+	cfg, err := config.LoadFor(repoRoot, configPid(pid))
+	if err != nil {
+		return "", model.Config{}, nil, err
+	}
+	fillRootMeta(&cfg, pid)
 	return root, cfg, repo, nil
 }
 
@@ -468,44 +507,18 @@ func (s *Server) cfgFor(r *http.Request) (model.Config, error) {
 }
 
 // issuesFor 返回请求作用域下的任务列表与生效配置。
-// project=* 时聚合所有未归档项目，并在每条任务的 Project 字段回填项目 id。
+// include=children 时（且多项目模式）聚合根项目及其子项目，并回填每条任务的 Project。
 func (s *Server) issuesFor(r *http.Request) ([]model.Issue, model.Config, error) {
 	pid := s.reqProject(r)
+	include := s.reqInclude(r)
 	s.mu.RLock()
-	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
+	repoRoot, _, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
 	s.mu.RUnlock()
 	if repoRoot == "" {
 		return nil, model.Config{}, i18n.New(i18n.NoRepo)
 	}
-	if isAggregate(pid) && mode == "multi" {
-		cfg, _ := config.LoadFor(repoRoot, "")
-		out := []model.Issue{}
-		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
-		if err == nil {
-			for _, e := range ents {
-				if !e.IsDir() {
-					continue
-				}
-				pdir := filepath.Join(repoRoot, "projects", e.Name())
-				if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
-					continue // 归档项目不参与聚合
-				}
-				pcfg, err := config.LoadFor(repoRoot, e.Name())
-				if err != nil {
-					continue
-				}
-				st := store.New(pdir, pcfg.IDPrefix, repo, false)
-				issues, err := st.ListIssues()
-				if err != nil {
-					continue
-				}
-				for i := range issues {
-					issues[i].Project = e.Name()
-				}
-				out = append(out, issues...)
-			}
-		}
-		return out, cfg, nil
+	if include && mode == "multi" {
+		return s.collectIssues(pid)
 	}
 	root, cfg, repo2, err := s.projectScope(r)
 	if err != nil {
@@ -514,6 +527,58 @@ func (s *Server) issuesFor(r *http.Request) ([]model.Issue, model.Config, error)
 	st := store.New(root, cfg.IDPrefix, repo2, s.opts.Push)
 	issues, err := st.ListIssues()
 	return issues, cfg, err
+}
+
+// collectIssues 收集项目及（根项目时）其子项目的任务，并回填 Project 字段。
+func (s *Server) collectIssues(pid string) ([]model.Issue, model.Config, error) {
+	s.mu.RLock()
+	repoRoot, repo := s.repoRoot, s.repo
+	s.mu.RUnlock()
+	cfg, err := config.LoadFor(repoRoot, configPid(pid))
+	if err != nil {
+		return nil, cfg, err
+	}
+	fillRootMeta(&cfg, pid)
+	ids := []string{pid}
+	if pid == RootPID {
+		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+		if err == nil {
+			var children []string
+			for _, e := range ents {
+				if e.IsDir() {
+					children = append(children, e.Name())
+				}
+			}
+			sort.Strings(children)
+			ids = append(ids, children...)
+		}
+	}
+	out := []model.Issue{}
+	for _, id := range ids {
+		dir, err := resolveProjectDir(repoRoot, id)
+		if err != nil {
+			continue
+		}
+		if id != RootPID {
+			if _, err := os.Stat(filepath.Join(dir, ".archived")); err == nil {
+				continue // 归档项目不参与聚合
+			}
+		}
+		pcfg, err := config.LoadFor(repoRoot, configPid(id))
+		if err != nil {
+			continue
+		}
+		st := store.New(dir, pcfg.IDPrefix, repo, false)
+		issues, err := st.ListIssues()
+		if err != nil {
+			continue
+		}
+		for i := range issues {
+			issues[i].Project = id
+		}
+		out = append(out, issues...)
+	}
+	return out, cfg, nil
 }
 
 func (s *Server) projectsMeta() []model.ProjectMeta {
@@ -1160,32 +1225,40 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		s.err(w, r, 400, i18n.NoRepo)
 		return
 	}
-	if isAggregate(pid) && mode == "multi" {
+	if s.reqInclude(r) && mode == "multi" && pid == RootPID {
 		out := []store.SearchHit{}
+		ids := []string{RootPID}
 		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
 		if err == nil {
 			for _, e := range ents {
-				if !e.IsDir() {
-					continue
+				if e.IsDir() {
+					ids = append(ids, e.Name())
 				}
-				pdir := filepath.Join(repoRoot, "projects", e.Name())
+			}
+		}
+		for _, id := range ids {
+			pdir, err := resolveProjectDir(repoRoot, id)
+			if err != nil {
+				continue
+			}
+			if id != RootPID {
 				if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
 					continue
 				}
-				pcfg, err := config.LoadFor(repoRoot, e.Name())
-				if err != nil {
-					continue
-				}
-				st := store.New(pdir, pcfg.IDPrefix, s.repo, false)
-				hits, err := st.Search(q)
-				if err != nil {
-					continue
-				}
-				for i := range hits {
-					hits[i].Issue.Project = e.Name()
-				}
-				out = append(out, hits...)
 			}
+			pcfg, err := config.LoadFor(repoRoot, configPid(id))
+			if err != nil {
+				continue
+			}
+			st := store.New(pdir, pcfg.IDPrefix, s.repo, false)
+			hits, err := st.Search(q)
+			if err != nil {
+				continue
+			}
+			for i := range hits {
+				hits[i].Issue.Project = id
+			}
+			out = append(out, hits...)
 		}
 		writeJSON(w, map[string]any{"hits": out})
 		return
@@ -1204,9 +1277,6 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
-	if s.rejectAggregate(w, r) {
-		return
-	}
 	st, cfg, err := s.storeFor(r)
 	if err != nil {
 		s.errOf(w, r, 400, err)
@@ -1264,9 +1334,6 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePatch(w http.ResponseWriter, r *http.Request) {
-	if s.rejectAggregate(w, r) {
-		return
-	}
 	st, _, err := s.storeFor(r)
 	if err != nil {
 		s.errOf(w, r, 400, err)
@@ -1287,9 +1354,6 @@ func (s *Server) handlePatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	if s.rejectAggregate(w, r) {
-		return
-	}
 	st, _, err := s.storeFor(r)
 	if err != nil {
 		s.errOf(w, r, 400, err)
@@ -1305,9 +1369,6 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddEntry(w http.ResponseWriter, r *http.Request) {
-	if s.rejectAggregate(w, r) {
-		return
-	}
 	st, _, err := s.storeFor(r)
 	if err != nil {
 		s.errOf(w, r, 400, err)
@@ -1332,9 +1393,6 @@ func (s *Server) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
-	if s.rejectAggregate(w, r) {
-		return
-	}
 	st, _, err := s.storeFor(r)
 	if err != nil {
 		s.errOf(w, r, 400, err)
