@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { App as AntApp, Tabs } from 'antd'
+import { useLocation } from 'react-router-dom'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { ROOT_PID } from '../nav'
+import { ROOT_PID, useGo } from '../nav'
 import type { Schema } from '../types'
 import { type Scope, clone, collectIdIssues, managedKeys, toYaml } from '../components/SettingsShared'
 import SettingsBasicTab from '../components/SettingsBasicTab'
@@ -17,12 +18,22 @@ import UpdatePanel from '../components/UpdatePanel'
 export default function Settings() {
   const { schema, repo, projectId, reload } = useApp()
   const { message } = AntApp.useApp()
+  const loc = useLocation()
+  const go = useGo()
 
   const multi = repo.mode === 'multi'
   // 设置的职责由所在位置决定：项目集节点下 = 仓库级（项目集默认）；项目下 = 项目级（仅覆盖本项目）。
   // 单项目模式没有项目级概念，恒为仓库级。
   const program = !multi || projectId === ROOT_PID
   const scope: Scope = program ? 'repo' : 'project'
+
+  // 页签是 URL 的一部分（/settings/<tab>），可深链接、可后退；非法值回落「基本」。
+  const TAB_KEYS = ['basic', 'defs', 'fields', 'templates', 'yaml', 'about']
+  const pathRest = loc.pathname.replace(/^\/p\/[^/]+/, '')
+  const seg = pathRest.startsWith('/settings')
+    ? pathRest.slice('/settings'.length).replace(/^\//, '')
+    : ''
+  const active = TAB_KEYS.includes(seg) ? seg : 'basic'
 
   const [draft, setDraft] = useState<Schema>(() => clone(schema))
   const [saving, setSaving] = useState(false)
@@ -67,6 +78,8 @@ export default function Settings() {
 
       <Tabs
         destroyInactiveTabPane
+        activeKey={active}
+        onChange={(k) => go(`/settings/${k}`, { replace: true })}
         items={[
           {
             key: 'basic',

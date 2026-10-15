@@ -158,6 +158,13 @@ export default function App() {
     return projects.find((p) => p.id === id)?.name || id
   }
 
+  // 页面重挂载使用的 key：项目 + 项目内路径 + 查询。
+  // 设置页签也走 URL，但折叠成 /settings，这样切换页签不会重挂载整个页面
+  // （保留未保存的草稿），其它导航仍照旧重挂载以重置局部状态。
+  const pathRest = loc.pathname.replace(/^\/p\/[^/]+/, '')
+  const viewKey = pathRest.replace(/^\/settings(?:\/.*)?$/, '/settings')
+  const pageKey = `${projectId}|${viewKey}|${loc.search}`
+
   return (
     <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects, aggregate, projectName }}>
       <div className="app-shell">
@@ -166,7 +173,7 @@ export default function App() {
           <Sidebar onOpenPalette={() => setPaletteOpen(true)} />
           <main className="app-main">
             <Breadcrumb />
-            <div className="page" key={loc.pathname + loc.search}>
+            <div className="page" key={pageKey}>
               <Routes>
                 <Route path="/p/:pid/*" element={<ProjectRoutes />} />
                 <Route path="*" element={<Navigate to={projectPath(ROOT_PID, '/')} replace />} />
@@ -194,7 +201,7 @@ function ProjectRoutes() {
       <Route path="issue/:id" element={<IssueDetail />} />
       {schema.modules.gantt && <Route path="gantt" element={<Gantt />} />}
       {schema.modules.docs && <Route path="docs" element={<Docs />} />}
-      <Route path="settings" element={<Settings />} />
+      <Route path="settings/*" element={<Settings />} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
   )
