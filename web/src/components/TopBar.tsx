@@ -217,6 +217,7 @@ export default function TopBar() {
 
   return (
     <Layout.Header
+      className="app-topbar"
       style={{
         display: 'flex',
         alignItems: 'center',

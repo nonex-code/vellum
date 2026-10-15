@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Layout, Spin } from 'antd'
+import { Spin } from 'antd'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { api, setApiProject } from './api'
@@ -9,7 +9,7 @@ import { applyRepoDefault } from './i18n'
 import { SINGLE_PID, PROGRAM_PID, isProgramScope, parseProjectId, projectPath } from './nav'
 import type { ProjectMeta, RepoInfo, Schema } from './types'
 import TopBar from './components/TopBar'
-import Nav from './components/Nav'
+import Sidebar from './components/Sidebar'
 import Breadcrumb from './components/Breadcrumb'
 import CommandPalette from './components/CommandPalette'
 import Welcome from './onboarding/Welcome'
@@ -137,24 +137,26 @@ export default function App() {
 
   return (
     <Ctx.Provider value={{ schema, repo, reload, projectId, project, projects }}>
-      <Layout style={{ minHeight: '100%' }}>
+      <div className="app-shell">
         <TopBar />
-        <Nav onOpenPalette={() => setPaletteOpen(true)} />
-        <Breadcrumb />
-        <Layout.Content>
-          <div className="page" key={loc.pathname + loc.search}>
-            <Routes>
-              <Route path="/programs" element={<Projects />} />
-              <Route path="/programs/issues" element={<IssueList />} />
-              {schema.modules.board && <Route path="/programs/board" element={<Board />} />}
-              {schema.modules.gantt && <Route path="/programs/gantt" element={<Gantt />} />}
-              {schema.modules.search && <Route path="/programs/search" element={<Search />} />}
-              <Route path="/p/:pid/*" element={<ProjectRoutes />} />
-              <Route path="*" element={<Navigate to={projectPath(defaultPid, '/')} replace />} />
-            </Routes>
-          </div>
-        </Layout.Content>
-      </Layout>
+        <div className="app-body">
+          <Sidebar onOpenPalette={() => setPaletteOpen(true)} />
+          <main className="app-main">
+            <Breadcrumb />
+            <div className="page" key={loc.pathname + loc.search}>
+              <Routes>
+                <Route path="/programs" element={<Projects />} />
+                <Route path="/programs/issues" element={<IssueList />} />
+                {schema.modules.board && <Route path="/programs/board" element={<Board />} />}
+                {schema.modules.gantt && <Route path="/programs/gantt" element={<Gantt />} />}
+                {schema.modules.search && <Route path="/programs/search" element={<Search />} />}
+                <Route path="/p/:pid/*" element={<ProjectRoutes />} />
+                <Route path="*" element={<Navigate to={projectPath(defaultPid, '/')} replace />} />
+              </Routes>
+            </div>
+          </main>
+        </div>
+      </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </Ctx.Provider>
   )

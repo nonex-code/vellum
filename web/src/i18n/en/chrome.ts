@@ -25,7 +25,9 @@ export const chrome: Record<string, string> = {
   本地目录: 'Local directory',
   远程地址: 'Remote URL',
 
-  // 侧边导航（Nav.tsx）
+  // 侧边导航（Sidebar.tsx）
+  '展开侧栏': 'Expand sidebar',
+  '收起侧栏': 'Collapse sidebar',
   '甘特图': 'Gantt chart',
   '甘特': 'Gantt',
   '项目集管理': 'Portfolio management',
