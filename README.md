@@ -1,5 +1,7 @@
 # Vellum
 
+![Vellum logo](web/public/logo.png)
+
 浏览器/桌面双形态的工作台：issue 式任务跟进，所有数据都是仓库里的 **Markdown + git 纯文本**。
 Go 单体服务 + React/Ant Design 前端，前端产物 `go:embed` 进单个二进制。
 
@@ -66,17 +68,24 @@ web 服务与桌面程序同源共存：`main.go` 里 `newServer()` 一份装配
 `WB_HTTP_ADDR`，`desktop.go`（`-tags desktop`）在 `127.0.0.1` 的随机端口起同一个服务，窗口首帧跳转到该地址。
 Wails 只当窗口壳子，不引入绑定层，所以 API 与数据格式和 web 版完全一致，两者可同时运行（随机端口，不与 8420 冲突）。
 
+桌面构建走 **`wails build`**（由 `wails.json` 配置），它会自动从 [`build/appicon.png`](build/appicon.png)
+（1024×1024 方形、logo 居中）生成各平台图标，并把 Windows 资源（`.syso`）链接进 `.exe`：
+
 ```bash
-make desktop        # Windows：go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
-make desktop-unix   # macOS/Linux：go build -tags "desktop,production,webkit2_41" -o vellum-desktop
-./vellum-desktop
+make desktop        # Windows：wails build -platform windows/amd64 -> build/bin/vellum-desktop.exe
+make desktop-unix   # macOS/Linux：wails build -> build/bin/vellum-desktop
+./build/bin/vellum-desktop      # 或 vellum-desktop.exe（Windows）
 ```
 
-`-tags "desktop,production"` 是 Wails 脱离 CLI 手工构建的硬性要求（少了 `production` 只会弹提示框）。
-Windows 用 `-H=windowsgui` 隐藏控制台，且需要系统的 WebView2 运行时（Win10/11 随 Edge 自带）。
-macOS/Linux 走 CGO，需要原生依赖：macOS 需 Xcode 工具链（并链接 `UniformTypeIdentifiers` 框架，
+`-tags "desktop,production"` 是 Wails 脱离 CLI 手工构建的硬性要求（少了 `production` 只会弹提示框），已写在
+`wails.json` 的 `build:tags` 里。Windows 用 `-H=windowsgui` 隐藏控制台，且需要系统的 WebView2 运行时（Win10/11
+随 Edge 自带）。macOS/Linux 走 CGO，需要原生依赖：macOS 需 Xcode 工具链（并链接 `UniformTypeIdentifiers` 框架，
 `make desktop-unix` 已内置），Linux 需 GTK3 + WebKit2GTK（Ubuntu 24.04 对应 `libwebkit2gtk-4.1-dev`，
 构建标签加 `webkit2_41`）。
+
+Wails CLI 默认用 `go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0` 拉取（首次需联网补全 CLI 依赖）；
+若本机已装 `wails` 二进制，可 `make WAILS=wails desktop` 直接调用。本地改了 [`web/public/logo.png`](web/public/logo.png)
+后，用 `go run ./scripts/genicon` 重新生成 `build/appicon.png`，再 `make desktop` 即可更新桌面图标。
 
 ### 环境变量
 

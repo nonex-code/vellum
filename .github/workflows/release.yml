@@ -99,17 +99,21 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Windows 桌面构建无需 CGO（WebView2 走纯 Go syscall）；
-      # 与 `wails build` 一致，这里不设 CGO_ENABLED，继承默认值。
+      # Windows 桌面构建无需 CGO（WebView2 走纯 Go syscall）。
+      # 改用 `wails build`：自动从 build/appicon.png 生成图标与 .syso 资源并链接进 exe。
+      # -s 跳过前端构建（前端已由上一步 npm 产出 web/dist）；-skipbindings 前端为手写 React。
       - name: Build
         env:
           GOOS: windows
           GOARCH: amd64
         run: |
-          mkdir -p dist
           bin="vellum-$VERSION-desktop-windows-amd64"
-          go build -trimpath -tags "desktop,production" -ldflags "-s -w -H=windowsgui -X github.com/nonex-code/vellum/internal/version.Version=$VERSION" -o "dist/$bin.exe" .
-          powershell -Command "Compress-Archive -Path 'dist/$bin.exe' -DestinationPath '$bin.zip'"
+          go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build \
+            -platform windows/amd64 -s -skipbindings \
+            -tags "desktop,production" \
+            -ldflags "-s -w -H=windowsgui -X github.com/nonex-code/vellum/internal/version.Version=$VERSION"
+          cp "build/bin/vellum-desktop.exe" "$bin.exe"
+          powershell -Command "Compress-Archive -Path '$bin.exe' -DestinationPath '$bin.zip'"
           sha256sum "$bin.zip" > checksums-desktop-windows-amd64.txt
         shell: bash
 
@@ -151,10 +155,10 @@ jobs:
           go-version-file: go.mod
 
       # macOS 桌面壳走 Cocoa/WebKit，需要 CGO（runner 自带 Xcode 工具链）。
-      # Apple Silicon runner 上由 clang 交叉编译 amd64（Apple 工具链支持 -arch）。
-      # Wails v2.16 的 WailsContext.h 会 import <UniformTypeIdentifiers/UTType.h>，
-      # 但其 cgo LDFLAGS 未链接该框架，新 Xcode/SDK 下会报 _OBJC_CLASS_$_UTType 未定义，
-      # 故在此补上 -framework UniformTypeIdentifiers。
+      # 改用 `wails build`：-nopackage 只产出原生二进制（不打包 .app），与旧发布结构一致；
+      # -s 跳过前端（已构建）；-skipbindings 前端为手写 React。
+      # Wails v2.16 的 WailsContext.h 会 import <UniformTypeIdentifiers/UTType.h>，但其 cgo
+      # LDFLAGS 未链接该框架，新 Xcode/SDK 下会报 _OBJC_CLASS_$_UTType 未定义，故补 -framework。
       - name: Build
         env:
           GOOS: darwin
@@ -162,10 +166,13 @@ jobs:
           CGO_ENABLED: '1'
           CGO_LDFLAGS: '-framework UniformTypeIdentifiers'
         run: |
-          mkdir -p dist
           bin="vellum-$VERSION-desktop-darwin-$GOARCH"
-          go build -trimpath -tags "desktop,production" -ldflags "-s -w -X github.com/nonex-code/vellum/internal/version.Version=$VERSION" -o "dist/$bin" .
-          (cd dist && tar czf "../$bin.tar.gz" "$bin")
+          go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build \
+            -platform "darwin/$GOARCH" -s -skipbindings -nopackage \
+            -tags "desktop,production" \
+            -ldflags "-s -w -X github.com/nonex-code/vellum/internal/version.Version=$VERSION"
+          cp "build/bin/vellum-desktop" "$bin"
+          tar czf "$bin.tar.gz" "$bin"
           sha256sum "$bin.tar.gz" > "checksums-desktop-darwin-$GOARCH.txt"
         shell: bash
 
@@ -201,7 +208,7 @@ jobs:
           go-version-file: go.mod
 
       # Wails Linux 需要 GTK3 + WebKit2GTK；Ubuntu 24.04 提供的是 webkit2gtk-4.1，
-      # 对应 Wails 的 webkit2_41 构建标签。
+      # 对应 Wails 的 webkit2_41 构建标签。改用 `wails build` 自动生成 Linux 图标资源。
       - name: Install system deps
         run: |
           sudo apt-get update
@@ -213,10 +220,13 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: '1'
         run: |
-          mkdir -p dist
           bin="vellum-$VERSION-desktop-linux-amd64"
-          go build -trimpath -tags "desktop,production,webkit2_41" -ldflags "-s -w -X github.com/nonex-code/vellum/internal/version.Version=$VERSION" -o "dist/$bin" .
-          (cd dist && tar czf "../$bin.tar.gz" "$bin")
+          go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build \
+            -platform linux/amd64 -s -skipbindings -nopackage \
+            -tags "desktop,production,webkit2_41" \
+            -ldflags "-s -w -X github.com/nonex-code/vellum/internal/version.Version=$VERSION"
+          cp "build/bin/vellum-desktop" "$bin"
+          tar czf "$bin.tar.gz" "$bin"
           sha256sum "$bin.tar.gz" > checksums-desktop-linux-amd64.txt
 
       - uses: actions/upload-artifact@v4

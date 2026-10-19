@@ -313,7 +313,7 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
             className={cls('sb-program') + (atRoot ? ' active' : '')}
           >
             <span className="sb-logo">
-              <ApartmentOutlined />
+              <img src="/logo.png" alt="Vellum" className="sb-logo-img" />
             </span>
             <span className="sb-text sb-program-name">{workspaceName}</span>
           </NavLink>

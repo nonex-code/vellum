@@ -1,5 +1,7 @@
 # Vellum
 
+![Vellum logo](web/public/logo.png)
+
 A task workspace that runs both in the browser and as a desktop app: issue-style tracking where every piece of
 data is **Markdown and git plain text** inside the repository. A single Go binary serves the API and the
 React/Ant Design frontend, which is baked in with `go:embed`.
@@ -75,17 +77,27 @@ same server on a random `127.0.0.1` port and redirects the window's first frame 
 shell — no binding layer — so the API and data format are identical to the web build, and both can run at the
 same time (random port, never conflicting with 8420).
 
+The desktop build uses **`wails build`** (configured by `wails.json`), which automatically generates the
+per-platform icons from [`build/appicon.png`](build/appicon.png) (1024×1024, square, logo centered) and links
+the Windows resource (`.syso`) into the `.exe`:
+
 ```bash
-make desktop        # Windows: go build -tags "desktop,production" -ldflags "-H=windowsgui" -o vellum-desktop.exe
-make desktop-unix   # macOS/Linux: go build -tags "desktop,production,webkit2_41" -o vellum-desktop
-./vellum-desktop
+make desktop        # Windows: wails build -platform windows/amd64 -> build/bin/vellum-desktop.exe
+make desktop-unix   # macOS/Linux: wails build -> build/bin/vellum-desktop
+./build/bin/vellum-desktop      # or vellum-desktop.exe on Windows
 ```
 
 `-tags "desktop,production"` is mandatory when building Wails by hand (without `production` it only shows a
-message box). Windows uses `-H=windowsgui` to hide the console and needs the WebView2 runtime (bundled with
-Edge on Windows 10/11). macOS/Linux use CGO and need native deps: macOS needs the Xcode toolchain (plus
-linking the `UniformTypeIdentifiers` framework, wired into `make desktop-unix`), and Linux needs GTK3 +
-WebKit2GTK (Ubuntu 24.04 ships `libwebkit2gtk-4.1-dev`, which requires the `webkit2_41` build tag).
+message box) and is recorded in `wails.json`'s `build:tags`. Windows uses `-H=windowsgui` to hide the console
+and needs the WebView2 runtime (bundled with Edge on Windows 10/11). macOS/Linux use CGO and need native deps:
+macOS needs the Xcode toolchain (plus linking the `UniformTypeIdentifiers` framework, wired into
+`make desktop-unix`), and Linux needs GTK3 + WebKit2GTK (Ubuntu 24.04 ships `libwebkit2gtk-4.1-dev`, which
+requires the `webkit2_41` build tag).
+
+The Wails CLI is pulled via `go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0` by default (needs network
+the first time to fetch CLI deps); if `wails` is installed locally, use `make WAILS=wails desktop`. After
+changing [`web/public/logo.png`](web/public/logo.png), run `go run ./scripts/genicon` to regenerate
+`build/appicon.png`, then `make desktop` to refresh the desktop icon.
 
 ### Environment variables
 

@@ -9,9 +9,18 @@
 # 前端依赖与构建产物：dist 全部由 `make web`（或 CI）生成，不进版本库
 /web/node_modules/
 /web/dist/
+# Wails 在桌面构建时生成的 runtime JS 桩（手写前端不使用，每次 wails build 重建）
+/web/wailsjs/
 
 # 运行时数据：本机打开过的仓库索引，不属于项目源码
 /data/
+
+# Wails 桌面构建产物（源图标见 build/appicon.png，需保留）
+/build/bin/
+/build/windows/
+/build/darwin/
+/build/linux/
+*-res.syso
 
 # 会话草稿与本地工具状态
 /_smoke/
