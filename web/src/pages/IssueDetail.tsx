@@ -32,7 +32,7 @@ import { fmtTime, fromNow, toggleCheckbox } from '../util'
 import { useGo } from '../nav'
 import Markdown from '../components/Markdown'
 import MarkdownEditor from '../components/MarkdownEditor'
-import EditIssueDrawer from '../components/EditIssueDrawer'
+import IssueForm, { serializeFields, type IssueFormValues } from '../components/IssueForm'
 import { StatusTag } from '../components/tags'
 
 export default function IssueDetail() {
@@ -46,13 +46,38 @@ export default function IssueDetail() {
   const [loading, setLoading] = useState(true)
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editSaving, setEditSaving] = useState(false)
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const [addingSub, setAddingSub] = useState(false)
   const [subTitle, setSubTitle] = useState('')
   const [subPri, setSubPri] = useState<string | undefined>()
   const [subSaving, setSubSaving] = useState(false)
+
+  // 原地编辑：复用 IssueForm（与新建共用一套代码），编辑整页字段后回写。
+  async function handleEditSubmit(v: IssueFormValues) {
+    setEditSaving(true)
+    try {
+      const { start, due, ...rest } = v
+      const d = await api.patchIssue(id, {
+        ...rest,
+        body: v.body ?? '',
+        fields: serializeFields(schema, v.fields),
+        start: dayjs.isDayjs(start) ? start.format('YYYY-MM-DD') : '',
+        due: dayjs.isDayjs(due) ? due.format('YYYY-MM-DD') : '',
+      })
+      setIssue(d.issue)
+      setEditing(false)
+      message.success(t('已保存'))
+      await load()
+    } catch (e) {
+      // patchIssue 内部已 toast 错误。
+      void e
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -221,9 +246,13 @@ export default function IssueDetail() {
           <span className="stamp">{issue.id}</span>
           <span className="mono">{t('{time} 更新', { time: fromNow(issue.updated) })}</span>
           <span style={{ flex: 1 }} />
-          <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>
-            {t('编辑')}
-          </Button>
+          {editing ? (
+            <Button onClick={() => setEditing(false)}>{t('取消')}</Button>
+          ) : (
+            <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>
+              {t('编辑')}
+            </Button>
+          )}
           <Popconfirm
             title={t('删除这个任务？')}
             description={t('会连同其跟进与附件一起从仓库删除，且不可撤销。')}
@@ -269,6 +298,19 @@ export default function IssueDetail() {
       </div>
 
       <div className="issue-layout">
+        {editing ? (
+          <IssueForm
+            key={issue.id}
+            schema={schema}
+            issues={all}
+            initial={issue}
+            selfId={issue.id}
+            submitting={editSaving}
+            onSubmit={handleEditSubmit}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+        <>
         <div>
           <div className="section-label">{t('描述')}</div>
           <div style={{ marginBottom: 4 }}>
@@ -522,17 +564,9 @@ export default function IssueDetail() {
             </>
           )}
         </aside>
+        </>
+        )}
       </div>
-
-      <EditIssueDrawer
-        issue={issue}
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSaved={(next) => {
-          setIssue(next)
-          load()
-        }}
-      />
     </>
   )
 }
