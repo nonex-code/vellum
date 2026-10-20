@@ -46,6 +46,9 @@ const (
 	DocExists                  = "doc_exists"
 	DocNotFound                = "doc_not_found"
 	IssueNotFound              = "issue_not_found"
+	EntryNotFound              = "entry_not_found"
+	EntryNotEditable           = "entry_not_editable"
+	EntryBodyEmpty             = "entry_body_empty"
 	IllegalPath                = "illegal_path"
 	ConfigUnparsable           = "config_unparsable"
 	ConfigNotMapping           = "config_not_mapping"
@@ -87,6 +90,9 @@ var entries = map[string][2]string{
 	DocExists:                  {"文档已存在: %s", "Document already exists: %s"},
 	DocNotFound:                {"文档不存在: %s", "Document not found: %s"},
 	IssueNotFound:              {"任务不存在: %s", "Issue not found: %s"},
+	EntryNotFound:              {"跟进不存在: %s", "Follow-up not found: %s"},
+	EntryNotEditable:           {"该跟进不可编辑或删除", "This follow-up cannot be edited or deleted"},
+	EntryBodyEmpty:             {"跟进内容不能为空", "Follow-up content cannot be empty"},
 	IllegalPath:                {"非法路径", "Illegal path"},
 	ConfigUnparsable:           {"现有配置无法解析: %v", "Existing configuration cannot be parsed: %v"},
 	ConfigNotMapping:           {"配置顶层必须是键值映射", "The top level of the configuration must be a key-value mapping"},

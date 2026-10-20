@@ -120,6 +120,8 @@ func (s *Server) routes() {
 	m.HandleFunc("PATCH /api/issues/{id}", s.handlePatch)
 	m.HandleFunc("DELETE /api/issues/{id}", s.handleDelete)
 	m.HandleFunc("POST /api/issues/{id}/entries", s.handleAddEntry)
+	m.HandleFunc("PATCH /api/issues/{id}/entries/{file}", s.handleUpdateEntry)
+	m.HandleFunc("DELETE /api/issues/{id}/entries/{file}", s.handleDeleteEntry)
 	m.HandleFunc("POST /api/issues/{id}/files", s.handleUpload)
 	m.HandleFunc("GET /api/files/{id}/{path...}", s.handleFile)
 	m.HandleFunc("GET /api/search", s.handleSearch)
@@ -1433,6 +1435,46 @@ func (s *Server) handleAddEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	s.fire("entry.create", map[string]any{"id": r.PathValue("id"), "entry": en})
 	writeJSON(w, map[string]any{"entry": en})
+}
+
+func (s *Server) handleUpdateEntry(w http.ResponseWriter, r *http.Request) {
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	var in struct {
+		Body string `json:"body"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	if strings.TrimSpace(in.Body) == "" {
+		s.err(w, r, 400, i18n.EntryBodyEmpty)
+		return
+	}
+	en, err := st.UpdateEntry(r.PathValue("id"), r.PathValue("file"), in.Body)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	s.fire("entry.update", map[string]any{"id": r.PathValue("id"), "entry": en})
+	writeJSON(w, map[string]any{"entry": en})
+}
+
+func (s *Server) handleDeleteEntry(w http.ResponseWriter, r *http.Request) {
+	st, _, err := s.storeFor(r)
+	if err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	if err := st.DeleteEntry(r.PathValue("id"), r.PathValue("file")); err != nil {
+		s.errOf(w, r, 400, err)
+		return
+	}
+	s.fire("entry.delete", map[string]any{"id": r.PathValue("id"), "file": r.PathValue("file")})
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

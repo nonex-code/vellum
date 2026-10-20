@@ -54,6 +54,10 @@ export default function IssueDetail() {
   const [subTitle, setSubTitle] = useState('')
   const [subPri, setSubPri] = useState<string | undefined>()
   const [subSaving, setSubSaving] = useState(false)
+  // 跟进条目就地编辑：记录正在编辑的文件名与草稿，以及保存中状态。
+  const [editingEntry, setEditingEntry] = useState<string | null>(null)
+  const [entryDraft, setEntryDraft] = useState('')
+  const [entrySaving, setEntrySaving] = useState(false)
 
   // 原地编辑：复用 IssueForm（与新建共用一套代码），编辑整页字段后回写。
   async function handleEditSubmit(v: IssueFormValues) {
@@ -104,6 +108,34 @@ export default function IssueDetail() {
       setIssue(d.issue)
       await load()
       if (!silent) message.success(t('已更新'))
+    } catch (e) {
+      message.error((e as Error).message)
+    }
+  }
+
+  async function saveEntry(file: string) {
+    if (!entryDraft.trim()) {
+      message.warning(t('内容不能为空'))
+      return
+    }
+    setEntrySaving(true)
+    try {
+      await api.updateEntry(id, file, entryDraft)
+      setEditingEntry(null)
+      message.success(t('已保存'))
+      await load()
+    } catch (e) {
+      message.error((e as Error).message)
+    } finally {
+      setEntrySaving(false)
+    }
+  }
+
+  async function removeEntry(file: string) {
+    try {
+      await api.deleteEntry(id, file)
+      message.success(t('已删除'))
+      await load()
     } catch (e) {
       message.error((e as Error).message)
     }
@@ -424,7 +456,31 @@ export default function IssueDetail() {
               <div key={i} className={`timeline-entry${e.type === 'status' ? ' is-status' : ''}`}>
                 <div className="timeline-head">
                   {fmtTime(e.created)}
-                  {e.type === 'status' ? ` · ${t('状态变更')}` : ` · ${e.author || 'me'}`}
+                  {e.type === 'status'
+                    ? ` · ${t('状态变更')}`
+                    : ` · ${e.author || 'me'}`}
+                  {e.edited && (
+                    <span className="timeline-edited"> · {t('已编辑')}</span>
+                  )}
+                  {e.type !== 'status' && (
+                    <span className="timeline-actions">
+                      {editingEntry === e.file ? (
+                        <a onClick={() => setEditingEntry(null)}>{t('取消')}</a>
+                      ) : (
+                        <a onClick={() => { setEditingEntry(e.file); setEntryDraft(e.body) }}>{t('编辑')}</a>
+                      )}
+                      <Popconfirm
+                        title={t('删除这条跟进？')}
+                        description={t('删除后不可恢复，但其内容仍留在 git 历史中。')}
+                        okText={t('删除')}
+                        cancelText={t('取消')}
+                        okButtonProps={{ danger: true }}
+                        onConfirm={() => removeEntry(e.file)}
+                      >
+                        <a className="danger">{t('删除')}</a>
+                      </Popconfirm>
+                    </span>
+                  )}
                 </div>
                 {e.type === 'status' ? (
                   <div>
@@ -437,6 +493,28 @@ export default function IssueDetail() {
                         {e.body}
                       </div>
                     )}
+                  </div>
+                ) : editingEntry === e.file ? (
+                  <div style={{ marginTop: 6 }}>
+                    <MarkdownEditor
+                      value={entryDraft}
+                      onChange={setEntryDraft}
+                      minRows={4}
+                      issueId={issue.id}
+                      autoFocus
+                      placeholder={t('写一条跟进，可粘贴/选择图片…')}
+                    />
+                    <Space style={{ marginTop: 8 }}>
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={entrySaving}
+                        onClick={() => saveEntry(e.file)}
+                      >
+                        {t('保存')}
+                      </Button>
+                      <Button size="small" onClick={() => setEditingEntry(null)}>{t('取消')}</Button>
+                    </Space>
                   </div>
                 ) : (
                   <Markdown issueId={issue.id}>{e.body}</Markdown>

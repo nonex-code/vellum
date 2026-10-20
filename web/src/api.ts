@@ -67,6 +67,16 @@ export const api = {
     req<{ ok: boolean }>(`/api/issues/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   addEntry: (id: string, body: { body: string; type?: string }) =>
     req<{ entry: Entry }>(`/api/issues/${encodeURIComponent(id)}/entries`, json(body)),
+  updateEntry: (id: string, file: string, body: string) =>
+    req<{ entry: Entry }>(
+      `/api/issues/${encodeURIComponent(id)}/entries/${encodeURIComponent(file)}`,
+      json({ body }, 'PATCH'),
+    ),
+  deleteEntry: (id: string, file: string) =>
+    req<{ ok: boolean }>(
+      `/api/issues/${encodeURIComponent(id)}/entries/${encodeURIComponent(file)}`,
+      { method: 'DELETE' },
+    ),
   search: (q: string) => req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}`),
   searchAll: (q: string) =>
     req<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}&project=*`),

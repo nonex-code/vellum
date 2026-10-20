@@ -270,6 +270,17 @@ body {
 .timeline-body {
   white-space: pre-wrap;
 }
+.timeline-edited {
+  color: var(--ink-soft);
+}
+.timeline-actions {
+  float: right;
+  display: inline-flex;
+  gap: 12px;
+}
+.timeline-actions .danger:hover {
+  color: var(--danger, #d4380d);
+}
 
 /* ---------- 账本式表格 ---------- */
 .ledger .ant-table {

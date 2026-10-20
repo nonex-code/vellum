@@ -255,6 +255,98 @@ func (s *Store) AddEntry(id string, in model.Entry) (model.Entry, error) {
 	return en, nil
 }
 
+// entryPath 返回某条跟进的时间线文件路径；不存在则报错。
+func (s *Store) entryPath(id, file string) (string, error) {
+	if file == "" || strings.ContainsAny(file, "/\\") {
+		return "", i18n.New(i18n.EntryNotFound, file)
+	}
+	p := filepath.Join(s.issueDir(id), "entries", file)
+	if _, err := os.Stat(p); err != nil {
+		return "", i18n.New(i18n.EntryNotFound, file)
+	}
+	return p, nil
+}
+
+// UpdateEntry 改写一条跟进的内容，并标记 edited（status 状态变更条目不可改）。
+func (s *Store) UpdateEntry(id, file, body string) (model.Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := s.readIssueFile(id); err != nil {
+		return model.Entry{}, i18n.New(i18n.IssueNotFound, id)
+	}
+	p, err := s.entryPath(id, file)
+	if err != nil {
+		return model.Entry{}, err
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return model.Entry{}, err
+	}
+	fm, _ := splitFrontmatter(data)
+	var en model.Entry
+	if len(fm) > 0 {
+		if err := yaml.Unmarshal(fm, &en); err != nil {
+			return model.Entry{}, err
+		}
+	}
+	if en.Type == "status" {
+		return model.Entry{}, i18n.New(i18n.EntryNotEditable)
+	}
+	en.Body = body
+	en.Edited = true
+	fm2, err := yaml.Marshal(en)
+	if err != nil {
+		return model.Entry{}, err
+	}
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.Write(fm2)
+	b.WriteString("---\n")
+	b.WriteString(body)
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
+		return model.Entry{}, err
+	}
+	if err := s.commit(fmt.Sprintf("%s: edit %s", id, file)); err != nil {
+		return model.Entry{}, err
+	}
+	en.File = file
+	return en, nil
+}
+
+// DeleteEntry 删除一条跟进文件（status 状态变更条目不可删）。
+func (s *Store) DeleteEntry(id, file string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := s.readIssueFile(id); err != nil {
+		return i18n.New(i18n.IssueNotFound, id)
+	}
+	p, err := s.entryPath(id, file)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	fm, _ := splitFrontmatter(data)
+	var en model.Entry
+	if len(fm) > 0 {
+		_ = yaml.Unmarshal(fm, &en)
+	}
+	if en.Type == "status" {
+		return i18n.New(i18n.EntryNotEditable)
+	}
+	if err := os.Remove(p); err != nil {
+		return err
+	}
+	if err := s.commit(fmt.Sprintf("%s: remove %s", id, file)); err != nil {
+		return err
+	}
+	return nil
+}
+
 // UpdateIssue 修改任务字段；状态变化时自动补一条 status 条目。
 func (s *Store) UpdateIssue(id string, patch map[string]any) (model.Issue, error) {
 	s.mu.Lock()
