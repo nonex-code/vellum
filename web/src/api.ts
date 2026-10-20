@@ -1,4 +1,4 @@
-import type { Doc, DocHit, Entry, GanttGroup, Issue, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit, UpdateInfo, VersionInfo } from './types'
+import type { Doc, DocHit, Entry, GanttGroup, Issue, McpInfo, Overview, ProjectMeta, ProjectStat, RepoInfo, RepoMeta, Schema, SearchHit, UpdateInfo, VersionInfo } from './types'
 import { getLang, t } from './i18n'
 
 // apiProject 是当前 URL 项目上下文，App 每次渲染时同步设置。
@@ -104,6 +104,7 @@ export const api = {
   searchDocs: (q: string) => req<{ hits: DocHit[] }>(`/api/docs/search?q=${encodeURIComponent(q)}`),
 
   version: () => req<VersionInfo>('/api/version'),
+  mcpInfo: () => req<McpInfo>('/api/mcp/info'),
   checkUpdate: () => req<UpdateInfo>('/api/update/check'),
   applyUpdate: () => req<{ ok: boolean; version: string }>('/api/update/apply', { method: 'POST' }),
 }

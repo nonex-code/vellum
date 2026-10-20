@@ -26,7 +26,8 @@ func main() {
 	}
 	origin := fmt.Sprintf("http://127.0.0.1:%d/", ln.Addr().(*net.TCPAddr).Port)
 	go func() {
-		log.Printf("vellum listening on %s", origin)
+		// 端口随机，MCP 客户端要填的就是这个地址（也可在「设置 → MCP」里看到）。
+		log.Printf("vellum listening on %s (MCP: %smcp)", origin, origin)
 		if err := http.Serve(ln, srv); err != nil {
 			log.Fatal(err)
 		}

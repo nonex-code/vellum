@@ -145,4 +145,34 @@ export const settings: Record<string, string> = {
     'This scope has no workbench.yaml yet; saving writes the content below into the repository.',
   '直接编辑仓库内的纯文本配置。保存时后端做 YAML 校验，非法会报错且不写入；成功后全局配置即时生效。':
     'Edit the plain-text configuration in the repository directly. On save the backend validates the YAML and reports an error without writing if it is invalid; on success the global configuration takes effect immediately.',
+
+  // ---- components/McpPanel.tsx ----
+  'MCP 接入': 'MCP Access',
+  '让 AI 助手直接读写这个工作台': 'Let AI assistants read and write this workspace',
+  '这个端点走 MCP 的 Streamable HTTP 传输：POST JSON-RPC，无会话。工具直接读写仓库里的纯文本文件，每次写入都会自动 git commit，和界面操作完全等价。':
+    'This endpoint speaks MCP over Streamable HTTP: POST JSON-RPC, no sessions. Tools read and write the plain-text files in the repository, and every write is committed to git automatically — exactly like using the UI.',
+  'MCP 未启用': 'MCP is disabled',
+  '启动时设置了 WB_MCP=false，MCP 端点已关闭；去掉该变量（或设为 true）并重启即可启用。':
+    'WB_MCP=false was set at startup, so the MCP endpoint is off. Remove the variable (or set it to true) and restart to enable it.',
+  已启用: 'Enabled',
+  未启用: 'Disabled',
+  端点: 'Endpoint',
+  协议版本: 'Protocol version',
+  鉴权: 'Auth',
+  '需要 Bearer token': 'Bearer token required',
+  '无需 token': 'No token required',
+  复制配置: 'Copy config',
+  复制端点: 'Copy endpoint',
+  已复制: 'Copied',
+  '复制失败，请手动选择文本复制': 'Copy failed — select the text and copy it manually',
+  客户端配置: 'Client config',
+  '粘贴到 MCP 客户端（Claude Desktop、Cursor、Codex 等）的配置里即可；桌面版端口是随机的，请以本页地址为准。':
+    'Paste this into an MCP client (Claude Desktop, Cursor, Codex, …). The desktop build picks a random port, so always use the address shown on this page.',
+  '设置 WB_MCP_TOKEN 后，客户端需带 Authorization: Bearer <token>；同时设置 WB_AUTH 时还要通过 Basic 认证。':
+    'With WB_MCP_TOKEN set, clients must send Authorization: Bearer <token>; if WB_AUTH is set too, Basic authentication is also required.',
+  工具: 'Tools',
+  工具名: 'Tool',
+  说明: 'Description',
+  '任务与文档也作为资源暴露给客户端：vellum://issues/<id>、vellum://docs/<path>。':
+    'Issues and docs are also exposed as resources: vellum://issues/<id> and vellum://docs/<path>.',
 }

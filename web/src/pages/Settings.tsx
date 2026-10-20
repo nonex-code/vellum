@@ -13,6 +13,7 @@ import SettingsDefsTab from '../components/SettingsDefsTab'
 import SettingsFieldsTab from '../components/SettingsFieldsTab'
 import SettingsTemplatesTab from '../components/SettingsTemplatesTab'
 import SettingsYamlTab from '../components/SettingsYamlTab'
+import McpPanel from '../components/McpPanel'
 import UpdatePanel from '../components/UpdatePanel'
 
 export default function Settings() {
@@ -28,7 +29,7 @@ export default function Settings() {
   const scope: Scope = program ? 'repo' : 'project'
 
   // 页签是 URL 的一部分（/settings/<tab>），可深链接、可后退；非法值回落「基本」。
-  const TAB_KEYS = ['basic', 'defs', 'fields', 'templates', 'yaml', 'about']
+  const TAB_KEYS = ['basic', 'defs', 'fields', 'templates', 'yaml', 'mcp', 'about']
   const pathRest = loc.pathname.replace(/^\/p\/[^/]+/, '')
   const seg = pathRest.startsWith('/settings')
     ? pathRest.slice('/settings'.length).replace(/^\//, '')
@@ -105,6 +106,11 @@ export default function Settings() {
             key: 'yaml',
             label: t('YAML 源码'),
             children: <SettingsYamlTab scope={scope} />,
+          },
+          {
+            key: 'mcp',
+            label: t('MCP'),
+            children: <McpPanel />,
           },
           {
             key: 'about',

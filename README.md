@@ -98,6 +98,8 @@ Wails CLI 默认用 `go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0` 拉�
 | `WB_UPLOAD_MAX_MB` | `20` | 附件大小上限 |
 | `WB_AUTH` | 空 | 可选 HTTP Basic 认证，格式 `用户名:密码`（设置后访问需登录） |
 | `WB_WEBHOOK` | 空 | 覆盖 `workbench.yaml` 中的 webhook 地址 |
+| `WB_MCP` | `true` | 是否暴露 MCP 端点 `/mcp`（设为 `false` 关闭） |
+| `WB_MCP_TOKEN` | 空 | 可选 MCP 访问令牌，设置后 `/mcp` 需 `Authorization: Bearer <token>` |
 
 ### 离线构建
 
@@ -141,6 +143,41 @@ git push origin v0.1.0
   本机顶栏切换记在 localStorage，优先级更高。清掉 localStorage 即回到仓库默认。
 - 数据本身不翻译：任务标题、状态名、项目名、文档正文是用户写的文本，界面切换不影响它们。
 
+## MCP（给 AI 助手用）
+
+服务内置一个 MCP（Model Context Protocol）端点 `POST /mcp`，Claude Desktop、Cursor、Codex 等客户端可以直接读写
+这个工作台：
+
+```json
+{
+  "mcpServers": {
+    "vellum": { "type": "http", "url": "http://localhost:8420/mcp" }
+  }
+}
+```
+
+桌面版端口是随机的，实际地址见「设置 → MCP」，或启动日志里的 `MCP: http://127.0.0.1:<port>/mcp`。
+
+- **传输**：Streamable HTTP（POST JSON-RPC，无会话、无服务端推送流），协议版本 `2025-06-18`，兼容
+  `2025-03-26` / `2024-11-05`。不引第三方 SDK，纯标准库实现，离线构建不受影响。
+- **工具**：`get_workspace`（schema 与统计）· `list_issues` · `get_issue` · `create_issue` · `update_issue` ·
+  `add_comment` · `delete_issue` · `search` · `list_docs` · `read_doc` · `write_doc` · `delete_doc`。
+- **资源**：`vellum://issues/<id>` 与 `vellum://docs/<path>`。
+- **行为**：和界面共用 store 层，写入直接落到仓库里的 Markdown 并自动 `git commit`；删除类工具必须显式
+  `confirm=true`；未知的状态/标签/字段 id 只在 `warnings` 里提示，不会拒绝写入。
+- **多项目**：工具都带可选的 `project` 参数，缺省作用于当前项目；`project="~"` 是项目集根，
+  `include_children=true` 时聚合子项目。
+- **开关与鉴权**：`WB_MCP=false` 关闭端点；`WB_MCP_TOKEN` 设置后要求 `Authorization: Bearer <token>`，
+  与 `WB_AUTH` 的 Basic 认证叠加生效。
+
+手工验证（curl）：
+
+```bash
+curl -s -X POST http://localhost:8420/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"create_issue","arguments":{"title":"来自助手","body":"正文"}}}'
+```
+
 ## 功能
 
 - **首页**：待办/进行中/已完成统计与分布条、本周新增/完成、「进行中」「需关注」、里程碑进度、最近动态、停滞任务、负责人负载；点数字直接跳到对应筛选。
@@ -157,7 +194,7 @@ git push origin v0.1.0
 
 已实现：仓库加载/创建/切换 · 项目集管理 · 首页概览 · 命令面板与快捷键 · 列表筛选排序树形 · 看板拖拽 · 甘特图 ·
 任务增删改查 · 跟进 · 附件 · 状态切换历史 · 全文搜索（任务+文档）· 文档中心 · 配置中心（表单+YAML）· 子任务 ·
-自定义字段 · 里程碑 · 模板 · Webhook · Basic 认证 · git 提交与手动同步 · 中英双语界面。
+自定义字段 · 里程碑 · 模板 · Webhook · Basic 认证 · git 提交与手动同步 · MCP 端点（AI 助手读写）· 中英双语界面。
 
 后续可做：自定义字段筛选、增量全文索引、多用户与权限、通知集成。
 

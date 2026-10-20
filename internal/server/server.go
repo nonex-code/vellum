@@ -19,6 +19,7 @@ import (
 
 	"github.com/nonex-code/vellum/internal/config"
 	"github.com/nonex-code/vellum/internal/gitrepo"
+	"github.com/nonex-code/vellum/internal/mcp"
 	"github.com/nonex-code/vellum/internal/model"
 	"github.com/nonex-code/vellum/internal/store"
 	"github.com/nonex-code/vellum/internal/update"
@@ -38,6 +39,9 @@ type Options struct {
 	UpdateRepo        string // GitHub 仓库 owner/name
 	UpdateEnabled     bool   // 是否启用自更新接口
 	UpdateAllowRemote bool   // 是否允许非本机发起更新
+
+	MCPEnabled bool   // 是否暴露 MCP 端点 /mcp（给 AI 助手读写工作台）
+	MCPToken   string // 非空时 /mcp 要求 Authorization: Bearer <token>
 }
 
 // repoEntry 是“已知仓库”的一条记录，持久化在 repos.json。
@@ -68,6 +72,8 @@ type Server struct {
 	repos     []repoEntry
 
 	updater *update.Updater // 非 nil 时启用自更新接口
+
+	mcpSrv *mcp.Server // 非 nil 时暴露 MCP 端点
 }
 
 // New 构造服务并注册路由。
@@ -87,6 +93,9 @@ func New(o Options) *Server {
 	s.repos = s.loadRepos()
 	if o.UpdateEnabled {
 		s.updater = update.New(o.UpdateRepo)
+	}
+	if o.MCPEnabled {
+		s.mcpSrv = s.buildMCPServer()
 	}
 	s.routes()
 	return s
@@ -126,6 +135,12 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/docs", s.handleDocsCreate)
 	m.HandleFunc("GET /api/docs/search", s.handleDocsSearch)
 	m.HandleFunc("GET /api/version", s.handleVersion)
+	// MCP 端点必须按方法注册：无方法限定的 "/mcp" 会与下面的 "GET /"（静态站点）冲突。
+	// 其他方法由 mux 直接回 405（带 Allow 头）。
+	m.HandleFunc("POST /mcp", s.handleMCP)
+	m.HandleFunc("GET /mcp", s.handleMCP)
+	m.HandleFunc("DELETE /mcp", s.handleMCP)
+	m.HandleFunc("GET /api/mcp/info", s.handleMCPInfo)
 	if s.updater != nil {
 		m.HandleFunc("GET /api/update/check", s.handleUpdateCheck)
 		m.HandleFunc("POST /api/update/apply", s.handleUpdateApply)
@@ -466,17 +481,44 @@ func fillRootMeta(cfg *model.Config, pid string) {
 	}
 }
 
+// normPID 归一化项目 id：空取服务端当前项目，single 模式与 "*"/"all" 回落根项目。
+// 第二个返回值表示该 id 原本是聚合语义（读请求据此展开子项目）。
+func (s *Server) normPID(pid string) (string, bool) {
+	pid = strings.TrimSpace(pid)
+	agg := isAggregate(pid)
+	s.mu.RLock()
+	cur, mode := s.projectID, s.cfg.Workspace.Mode
+	s.mu.RUnlock()
+	if mode != "multi" {
+		return RootPID, agg
+	}
+	if pid == "" {
+		if cur != "" {
+			return cur, false
+		}
+		return RootPID, false
+	}
+	if agg {
+		return RootPID, true
+	}
+	return pid, false
+}
+
 // projectScope 返回请求项目对应的 issues 根目录、生效配置与 git 仓库。
-// 根项目落在仓库根；子项目落在 projects/<id>。single 模式恒为根项目。
 func (s *Server) projectScope(r *http.Request) (string, model.Config, *gitrepo.Repo, error) {
+	return s.scopeFor(s.reqProject(r))
+}
+
+// scopeFor 按项目 id 返回 issues 根目录、生效配置与 git 仓库（不依赖请求对象，MCP 也用它）。
+// 根项目落在仓库根；子项目落在 projects/<id>。single 模式恒为根项目。
+func (s *Server) scopeFor(pid string) (string, model.Config, *gitrepo.Repo, error) {
 	s.mu.RLock()
 	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
 	s.mu.RUnlock()
 	if repoRoot == "" {
 		return "", model.Config{}, nil, i18n.New(i18n.NoRepo)
 	}
-	pid := s.reqProject(r)
-	if mode != "multi" {
+	if mode != "multi" || pid == "" {
 		pid = RootPID
 	}
 	root, err := resolveProjectDir(repoRoot, pid)
@@ -507,12 +549,15 @@ func (s *Server) cfgFor(r *http.Request) (model.Config, error) {
 }
 
 // issuesFor 返回请求作用域下的任务列表与生效配置。
-// include=children 时（且多项目模式）聚合根项目及其子项目，并回填每条任务的 Project。
 func (s *Server) issuesFor(r *http.Request) ([]model.Issue, model.Config, error) {
-	pid := s.reqProject(r)
-	include := s.reqInclude(r)
+	return s.issuesForPID(s.reqProject(r), s.reqInclude(r))
+}
+
+// issuesForPID 返回指定项目作用域下的任务列表与生效配置。
+// include 为真时（且多项目模式）聚合根项目及其子项目，并回填每条任务的 Project。
+func (s *Server) issuesForPID(pid string, include bool) ([]model.Issue, model.Config, error) {
 	s.mu.RLock()
-	repoRoot, _, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
+	repoRoot, mode := s.repoRoot, s.cfg.Workspace.Mode
 	s.mu.RUnlock()
 	if repoRoot == "" {
 		return nil, model.Config{}, i18n.New(i18n.NoRepo)
@@ -520,7 +565,7 @@ func (s *Server) issuesFor(r *http.Request) ([]model.Issue, model.Config, error)
 	if include && mode == "multi" {
 		return s.collectIssues(pid)
 	}
-	root, cfg, repo2, err := s.projectScope(r)
+	root, cfg, repo2, err := s.scopeFor(pid)
 	if err != nil {
 		return nil, cfg, err
 	}
@@ -1215,65 +1260,63 @@ func sortIssues(list []model.Issue, by, order string, prioRank map[string]int) {
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	pid := s.reqProject(r)
-	s.mu.RLock()
-	repoRoot := s.repoRoot
-	mode := s.cfg.Workspace.Mode
-	s.mu.RUnlock()
-	if repoRoot == "" {
-		s.err(w, r, 400, i18n.NoRepo)
-		return
-	}
-	if s.reqInclude(r) && mode == "multi" && pid == RootPID {
-		out := []store.SearchHit{}
-		ids := []string{RootPID}
-		ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
-		if err == nil {
-			for _, e := range ents {
-				if e.IsDir() {
-					ids = append(ids, e.Name())
-				}
-			}
-		}
-		for _, id := range ids {
-			pdir, err := resolveProjectDir(repoRoot, id)
-			if err != nil {
-				continue
-			}
-			if id != RootPID {
-				if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
-					continue
-				}
-			}
-			pcfg, err := config.LoadFor(repoRoot, configPid(id))
-			if err != nil {
-				continue
-			}
-			st := store.New(pdir, pcfg.IDPrefix, s.repo, false)
-			hits, err := st.Search(q)
-			if err != nil {
-				continue
-			}
-			for i := range hits {
-				hits[i].Issue.Project = id
-			}
-			out = append(out, hits...)
-		}
-		writeJSON(w, map[string]any{"hits": out})
-		return
-	}
-	st, _, err := s.storeFor(r)
+	hits, err := s.searchHitsFor(s.reqProject(r), s.reqInclude(r), r.URL.Query().Get("q"))
 	if err != nil {
 		s.errOf(w, r, 400, err)
 		return
 	}
-	hits, err := st.Search(q)
-	if err != nil {
-		s.errOf(w, r, 500, err)
-		return
-	}
 	writeJSON(w, map[string]any{"hits": hits})
+}
+
+// searchHitsFor 在指定项目作用域检索任务；根项目 + include 时聚合未归档的子项目。
+func (s *Server) searchHitsFor(pid string, include bool, q string) ([]store.SearchHit, error) {
+	s.mu.RLock()
+	repoRoot, repo, mode := s.repoRoot, s.repo, s.cfg.Workspace.Mode
+	s.mu.RUnlock()
+	if repoRoot == "" {
+		return nil, i18n.New(i18n.NoRepo)
+	}
+	if !(include && mode == "multi" && pid == RootPID) {
+		root, cfg, pRepo, err := s.scopeFor(pid)
+		if err != nil {
+			return nil, err
+		}
+		return store.New(root, cfg.IDPrefix, pRepo, s.opts.Push).Search(q)
+	}
+	out := []store.SearchHit{}
+	ids := []string{RootPID}
+	ents, err := os.ReadDir(filepath.Join(repoRoot, "projects"))
+	if err == nil {
+		for _, e := range ents {
+			if e.IsDir() {
+				ids = append(ids, e.Name())
+			}
+		}
+	}
+	for _, id := range ids {
+		pdir, err := resolveProjectDir(repoRoot, id)
+		if err != nil {
+			continue
+		}
+		if id != RootPID {
+			if _, err := os.Stat(filepath.Join(pdir, ".archived")); err == nil {
+				continue
+			}
+		}
+		pcfg, err := config.LoadFor(repoRoot, configPid(id))
+		if err != nil {
+			continue
+		}
+		hits, err := store.New(pdir, pcfg.IDPrefix, repo, false).Search(q)
+		if err != nil {
+			continue
+		}
+		for i := range hits {
+			hits[i].Issue.Project = id
+		}
+		out = append(out, hits...)
+	}
+	return out, nil
 }
 
 func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {

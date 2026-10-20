@@ -69,6 +69,9 @@ func newServer() http.Handler {
 		UpdateRepo:        env("WB_UPDATE_REPO", "nonex-code/vellum"),
 		UpdateEnabled:     env("WB_UPDATE", "true") != "false",
 		UpdateAllowRemote: env("WB_UPDATE_REMOTE", "false") == "true",
+
+		MCPEnabled: env("WB_MCP", "true") != "false",
+		MCPToken:   os.Getenv("WB_MCP_TOKEN"),
 	})
 
 	if repo := os.Getenv("WB_REPO"); repo != "" {

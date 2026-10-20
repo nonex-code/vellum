@@ -110,6 +110,8 @@ changing [`web/public/logo.png`](web/public/logo.png), run `go run ./scripts/gen
 | `WB_UPLOAD_MAX_MB` | `20` | Attachment size limit |
 | `WB_AUTH` | empty | Optional HTTP Basic auth, format `user:password` |
 | `WB_WEBHOOK` | empty | Overrides the webhook URL in `workbench.yaml` |
+| `WB_MCP` | `true` | Whether to expose the MCP endpoint `/mcp` (set `false` to disable) |
+| `WB_MCP_TOKEN` | empty | Optional MCP token; when set, `/mcp` requires `Authorization: Bearer <token>` |
 
 ### Offline builds
 
@@ -162,6 +164,44 @@ git push origin v0.1.0
 - Data is never translated: issue titles, status names, project names and document bodies are your own text and
   are unaffected by switching the interface language.
 
+## MCP (for AI assistants)
+
+The server ships an MCP (Model Context Protocol) endpoint at `POST /mcp`, so clients such as Claude Desktop,
+Cursor or Codex can read and write this workspace directly:
+
+```json
+{
+  "mcpServers": {
+    "vellum": { "type": "http", "url": "http://localhost:8420/mcp" }
+  }
+}
+```
+
+The desktop build picks a random port — the real address is shown under Settings → MCP, or in the startup log
+line `MCP: http://127.0.0.1:<port>/mcp`.
+
+- **Transport**: Streamable HTTP (POST JSON-RPC, no sessions, no server-sent stream), protocol version
+  `2025-06-18`, compatible with `2025-03-26` / `2024-11-05`. No third-party SDK — standard library only, so
+  offline builds stay unaffected.
+- **Tools**: `get_workspace` (schema and stats) · `list_issues` · `get_issue` · `create_issue` · `update_issue` ·
+  `add_comment` · `delete_issue` · `search` · `list_docs` · `read_doc` · `write_doc` · `delete_doc`.
+- **Resources**: `vellum://issues/<id>` and `vellum://docs/<path>`.
+- **Behaviour**: shares the store layer with the UI, so writes land in the repository's Markdown and are
+  committed to git automatically; delete tools require an explicit `confirm=true`; unknown status/label/field
+  ids only produce `warnings` instead of failing the write.
+- **Multi-project**: every tool takes an optional `project` argument, defaulting to the current project;
+  `project="~"` is the portfolio root, and `include_children=true` aggregates its child projects.
+- **Switch and auth**: `WB_MCP=false` disables the endpoint; `WB_MCP_TOKEN` requires
+  `Authorization: Bearer <token>`, on top of `WB_AUTH`'s Basic auth.
+
+Manual check with curl:
+
+```bash
+curl -s -X POST http://localhost:8420/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"create_issue","arguments":{"title":"From the assistant","body":"Body"}}}'
+```
+
 ## Features
 
 - **Home**: to-do / in-progress / done counts with a distribution bar, created and completed this week,
@@ -186,7 +226,8 @@ git push origin v0.1.0
 Implemented: repository load/create/switch · portfolio management · home overview · command palette and shortcuts ·
 list filtering, sorting and tree view · board drag & drop · Gantt · issue CRUD · follow-ups · attachments ·
 status history · full-text search (issues + docs) · documentation center · settings (form + YAML) · subtasks ·
-custom fields · milestones · templates · webhook · Basic auth · git commits and manual sync · bilingual interface.
+custom fields · milestones · templates · webhook · Basic auth · git commits and manual sync · MCP endpoint
+(read/write for AI assistants) · bilingual interface.
 
 Plausible next steps: filtering by custom fields, incremental full-text indexing, multi-user permissions,
 notification integrations.

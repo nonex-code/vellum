@@ -225,3 +225,20 @@ export interface UpdateInfo {
   size?: number
   publishedAt?: string
 }
+
+export interface McpTool {
+  name: string
+  title?: string
+  description?: string
+}
+
+export interface McpInfo {
+  enabled: boolean
+  endpoint?: string
+  path?: string
+  protocolVersion?: string
+  requiresToken?: boolean
+  resources?: boolean
+  tools?: McpTool[]
+  config?: { mcpServers: Record<string, { type: string; url: string }> }
+}
