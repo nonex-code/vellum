@@ -1,6 +1,7 @@
 # 构建产物 / build artifacts
 /vellum
 /vellum.exe
+/vellum-*-*
 /vellum-desktop.exe
 /Temp/
 *.exe~
