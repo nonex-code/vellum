@@ -82,7 +82,7 @@ export default function Board() {
 
   if (loading) {
     return (
-      <div className="fade">
+      <div className="page-pageboard fade">
         <div className="page-header">
           <div>
             <div className="page-kicker">{t('载入中…')}</div>
@@ -101,7 +101,7 @@ export default function Board() {
   }
 
   return (
-    <>
+    <div className="page-pageboard">
       <div className="page-header">
         <div>
           <div className="page-kicker">
@@ -227,6 +227,6 @@ export default function Board() {
           )
         })}
       </div>
-    </>
+    </div>
   )
 }

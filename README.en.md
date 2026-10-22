@@ -27,8 +27,9 @@ never in a database or a user home directory.
 - Hierarchy: **portfolio (repository) → project → issue**. In `single` mode one repository is one project;
   in `multi` mode the repository is a portfolio and `projects/<id>/` holds each project's own `issues/`,
   `meta/`, `docs/` and `workbench.yaml`.
-- Issue: `issues/<ID>/{issue.md, entries/, files/}`.
-- Follow-ups: `entries/<sequence>-<timestamp>-<author>.md`; filename order is chronological.
+- Issue: `issues/<ID>/{issue.md, files/}`.
+- Follow-ups: inlined in `issue.md` after the `<!-- vellum:entries -->` marker. Each entry starts with a human-readable line (`#### time · author · change`, visible when rendered) followed by a single-line `<!-- vellum:meta ... -->` comment for the program to parse. Everything about an issue lives in one markdown file.
+- Migration: legacy `entries/*.md` are merged into `issue.md` on startup and the directory is removed (idempotent).
 - Attachments: `files/<sha256[0:2]>/<sha256[2:4]>/<sha256>.<ext>`, committed to git directly.
 - Documents: `docs/**/*.md` (the folder tree is the organization; frontmatter carries title/tags/pinned).
 - IDs: `<prefix>-<4-digit seq>`, default prefix `WB`, counter in `meta/seq`.
@@ -224,7 +225,7 @@ curl -s -X POST http://localhost:8420/mcp -H 'Content-Type: application/json' \
 - **Templates**: prefill the new-issue form in one click.
 
 Implemented: repository load/create/switch · portfolio management · home overview · command palette and shortcuts ·
-list filtering, sorting and tree view · board drag & drop · Gantt · issue CRUD · follow-ups · attachments ·
+list filtering, sorting and tree view · board drag & drop · Gantt · calendar · issue CRUD · follow-ups · attachments ·
 status history · full-text search (issues + docs) · documentation center · settings (form + YAML) · subtasks ·
 custom fields · milestones · templates · webhook · Basic auth · git commits and manual sync · MCP endpoint
 (read/write for AI assistants) · bilingual interface.
