@@ -44,6 +44,7 @@ export interface Modules {
   attachments: boolean
   board: boolean
   gantt: boolean
+  calendar: boolean
   docs: boolean
   tree: boolean
   search: boolean

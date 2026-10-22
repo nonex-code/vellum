@@ -22,6 +22,7 @@ function boolModules(): { key: keyof Modules; label: string; desc: string }[] {
   return [
     { key: 'board', label: t('看板'), desc: t('拖拽卡片按状态整理') },
     { key: 'gantt', label: t('甘特图'), desc: t('按里程碑/时间线排期') },
+    { key: 'calendar', label: t('日历'), desc: t('按月查看任务的开始/截止日期') },
     { key: 'docs', label: t('文档'), desc: t('仓库内 Markdown 文档库') },
     { key: 'milestones', label: t('里程碑'), desc: t('详情/筛选/新建出现里程碑') },
     { key: 'attachments', label: t('附件'), desc: t('跟进里上传图片/文件') },
@@ -58,6 +59,7 @@ export default function SettingsBasicTab({ draft, onChange, scope, multi, saving
     ]
     if (m.board) opts.push({ value: 'board', label: t('看板') })
     if (m.gantt) opts.push({ value: 'gantt', label: t('甘特图') })
+    if (m.calendar) opts.push({ value: 'calendar', label: t('日历') })
     if (m.docs) opts.push({ value: 'docs', label: t('文档') })
     if (m.search) opts.push({ value: 'search', label: t('搜索') })
     if (multi) opts.push({ value: 'projects', label: t('项目集') })

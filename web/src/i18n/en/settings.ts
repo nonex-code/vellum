@@ -57,6 +57,7 @@ export const settings: Record<string, string> = {
   // ---- components/SettingsBasicTab.tsx ----
   拖拽卡片按状态整理: 'Drag cards to organize by status',
   '按里程碑/时间线排期': 'Schedule by milestone / timeline',
+  '按月查看任务的开始/截止日期': 'See issue start / due dates by month',
   '仓库内 Markdown 文档库': 'Markdown doc library in the repository',
   '详情/筛选/新建出现里程碑': 'Milestones appear in details / filters / new',
   '跟进里上传图片/文件': 'Upload images / files in follow-ups',

@@ -56,7 +56,7 @@ func Default() model.Config {
 		},
 		Modules: model.Modules{
 			Milestones: true, Subtasks: "both", Attachments: true,
-			Board: true, Gantt: true, Docs: true, Tree: true, Search: true,
+			Board: true, Gantt: true, Calendar: true, Docs: true, Tree: true, Search: true,
 		},
 		Views: model.Views{Default: "list", Nav: []string{"issues", "search", "settings"}},
 	}

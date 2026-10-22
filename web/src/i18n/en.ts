@@ -1,3 +1,4 @@
+import { calendar } from './en/calendar'
 import { chrome } from './en/chrome'
 import { common } from './en/common'
 import { docs } from './en/docs'
@@ -15,6 +16,7 @@ export const en: Record<string, string> = {
   ...home,
   ...issues,
   ...gantt,
+  ...calendar,
   ...docs,
   ...projects,
   ...settings,
