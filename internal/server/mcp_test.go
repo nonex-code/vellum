@@ -395,12 +395,16 @@ func TestMCPIssueLifecycle(t *testing.T) {
 		t.Errorf("默认作者 = %v，期望 ai", entry["author"])
 	}
 	entries, err := os.ReadDir(filepath.Join(dir, "issues", id, "entries"))
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("entries 目录异常: %v, %d 个文件", err, len(entries))
+	if err == nil || len(entries) != 0 {
+		t.Fatalf("新版应将时间线内联，不应再生成 entries 目录: %v, %d 个文件", err, len(entries))
 	}
-	// 文件名即时间序：序号-时间-作者.md
-	if !strings.HasSuffix(entries[0].Name(), "-ai.md") {
-		t.Errorf("跟进文件名 = %s", entries[0].Name())
+	// 跟进内联在 issue.md 中，且带可见标题行（人可读）+ 元数据注释（程序可读）
+	raw, _ := os.ReadFile(filepath.Join(dir, "issues", id, "issue.md"))
+	if !strings.Contains(string(raw), "<!-- vellum:meta") || !strings.Contains(string(raw), "author=ai") {
+		t.Errorf("issue.md 未内联时间线条目:\n%s", string(raw))
+	}
+	if !strings.Contains(string(raw), "#### ") {
+		t.Errorf("issue.md 缺少可见标题行:\n%s", string(raw))
 	}
 
 	// 改状态：自动补一条 status 时间线

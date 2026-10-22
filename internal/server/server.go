@@ -182,6 +182,13 @@ func (s *Server) Open(repo string) error {
 	}
 	s.mu.Lock()
 	s.repoRoot, s.repo, s.cfg = repoRoot, r, cfg
+	s.mu.Unlock()
+
+	// 先迁移全仓库的旧版 entries/*.md（幂等），再选定当前项目，
+	// 这样每个项目的迁移计数都能如实上报，不依赖启动时选中哪个项目。
+	s.migrateAllProjects(repoRoot, cfg, r)
+
+	s.mu.Lock()
 	if cfg.Workspace.Mode == "multi" {
 		ids := s.projectIDsLocked()
 		if len(ids) == 0 {
@@ -209,6 +216,58 @@ func (s *Server) Open(repo string) error {
 	s.mu.Unlock()
 	s.recordRepo(name, repoRoot, remote, mode)
 	return nil
+}
+
+// migrateAllProjects 扫描仓库内全部项目，把旧版 entries/*.md 合并进 issue.md。
+// 启动时跑一次，幂等；失败只告警不阻断启动。
+//
+// 路径完全由项目布局推导（与 resolveProjectDir 一致），不依赖具体仓库内容：
+//   - single 模式：仓库根就是一个项目
+//   - multi 模式：根项目（仓库根）+ projects/<id>/ 下每个子项目
+func (s *Server) migrateAllProjects(repoRoot string, cfg model.Config, r *gitrepo.Repo) {
+	type target struct {
+		dir   string
+		pid   string // 配置用 pid；根项目为空（配置继承从仓库根起）
+		label string
+	}
+	var targets []target
+
+	// 根项目：multi 下也有 issues/（未归档的项目集视图），一并处理。
+	targets = append(targets, target{repoRoot, "", "(root)"})
+
+	if cfg.Workspace.Mode == "multi" {
+		dir := filepath.Join(repoRoot, "projects")
+		ents, err := os.ReadDir(dir)
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Printf("vellum: 读取项目目录失败: %v\n", err)
+		}
+		for _, e := range ents {
+			// 与 projectIDsLocked 保持一致：只认目录，跳过隐藏目录。
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			targets = append(targets, target{filepath.Join(dir, e.Name()), e.Name(), e.Name()})
+		}
+	}
+
+	for _, t := range targets {
+		// 没有 issues/ 的目录直接跳过（空项目、刚创建的项目等）。
+		if st, err := os.Stat(filepath.Join(t.dir, "issues")); err != nil || !st.IsDir() {
+			continue
+		}
+		pcfg, err := config.LoadFor(repoRoot, t.pid)
+		if err != nil {
+			pcfg = cfg
+		}
+		n, files, err := store.New(t.dir, pcfg.IDPrefix, r, false).MigrateEntriesToInline()
+		if err != nil {
+			fmt.Printf("vellum: 项目 %s 时间线迁移失败（已跳过）: %v\n", t.label, err)
+			continue
+		}
+		if n > 0 {
+			fmt.Printf("vellum: 已内联 %s 的 %d 个任务 / %d 条跟进\n", t.label, n, files)
+		}
+	}
 }
 
 // loadRepos 读取已知仓库列表（文件不存在时返回空）。
@@ -324,7 +383,8 @@ func (s *Server) projectIDsLocked() []string {
 	}
 	var ids []string
 	for _, e := range ents {
-		if e.IsDir() {
+		// 跳过隐藏目录：.git、.archived 等不是项目。
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
 			ids = append(ids, e.Name())
 		}
 	}

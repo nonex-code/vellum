@@ -71,6 +71,7 @@ type Modules struct {
 	Attachments bool   `yaml:"attachments" json:"attachments"`
 	Board       bool   `yaml:"board" json:"board"`
 	Gantt       bool   `yaml:"gantt" json:"gantt"`
+	Calendar    bool   `yaml:"calendar" json:"calendar"`
 	Docs        bool   `yaml:"docs" json:"docs"`
 	Tree        bool   `yaml:"tree" json:"tree"`
 	Search      bool   `yaml:"search" json:"search"`
@@ -132,7 +133,10 @@ type Doc struct {
 }
 
 // Entry 是时间线条目（跟进/状态变更/附件）。
+// 条目现在内联存储在 issue.md 的同名文档里，ID 为条目在本文件中的稳定标识
+// （迁移自旧 entries/*.md 时沿用原文件名，新条目为 e-<unix nano>）。
 type Entry struct {
+	ID      string `yaml:"id,omitempty" json:"id"`
 	Author  string `yaml:"author" json:"author"`
 	Created string `yaml:"created" json:"created"`
 	Type    string `yaml:"type" json:"type"` // comment | status | attachment
@@ -140,5 +144,6 @@ type Entry struct {
 	To      string `yaml:"to,omitempty" json:"to,omitempty"`
 	Edited  bool   `yaml:"edited,omitempty" json:"edited,omitempty"`
 	Body    string `yaml:"-" json:"body"`
-	File    string `yaml:"-" json:"file"`
+	// File 是条目标识的旧称（= ID），仅为兼容前端与旧 API 保留。
+	File string `yaml:"-" json:"file"`
 }

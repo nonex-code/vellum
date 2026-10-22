@@ -24,7 +24,7 @@ import (
 const mcpProjectDesc = `项目 id（项目集模式下即 projects/<id>，如 "main"）。缺省用当前项目；"~" 表示仓库根项目`
 
 const mcpInstructions = `Vellum 是「仓库即工作台」的 issue 跟踪工具：任务、跟进、文档、配置全部是仓库里的纯文本
-（issues/<ID>/issue.md、issues/<ID>/entries/*.md、docs/**/*.md、workbench.yaml），每次写入都会自动 git commit。
+（issues/<ID>/issue.md（描述与跟进内联在同一文件）、issues/<ID>/files/、docs/**/*.md、workbench.yaml），每次写入都会自动 git commit。
 
 使用建议：
 1. 先调用 get_workspace 拿到工作台名、项目列表与 schema（状态/优先级/标签/类型/里程碑/自定义字段的合法 id）。
@@ -319,7 +319,7 @@ func (s *Server) mcpGetWorkspace(_ context.Context, args map[string]any) (any, e
 		"projectMeta":    cfg.Project,
 		"schema":         schemaSummary(cfg),
 		"stats":          stats,
-		"layout":         "issues/<ID>/{issue.md, entries/, files/} · docs/**/*.md · workbench.yaml",
+		"layout":         "issues/<ID>/{issue.md, files/} · docs/**/*.md · workbench.yaml",
 	}
 	if cfg.Workspace.Mode == "multi" {
 		out["projects"] = s.projectsMeta()

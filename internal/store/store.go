@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/nonex-code/vellum/internal/i18n"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/nonex-code/vellum/internal/i18n"
 
 	"gopkg.in/yaml.v3"
 
@@ -29,6 +29,10 @@ type Store struct {
 }
 
 // New 创建 Store。prefix 为空时默认 WB。
+//
+// 注意：不在构造器里做迁移。迁移是启动期的显式动作
+// （见 server.migrateAllProjects），这样才能把结果上报、日志清晰，
+// 也避免构造器产生隐式写盘副作用。
 func New(root, prefix string, repo *gitrepo.Repo, push bool) *Store {
 	if prefix == "" {
 		prefix = "WB"
@@ -70,44 +74,24 @@ func (s *Store) readIssueFile(id string) (model.Issue, error) {
 			return iss, err
 		}
 	}
-	iss.Body = body
+	desc, timeline := splitBodyEntries(body)
+	iss.Body = desc
 	if iss.ID == "" {
 		iss.ID = id
 	}
+	_ = timeline
 	return iss, nil
 }
 
+// readEntries 从 issue.md 内联的时间线区块解析条目。
 func (s *Store) readEntries(id string) []model.Entry {
-	dir := filepath.Join(s.issueDir(id), "entries")
-	ents, err := os.ReadDir(dir)
+	data, err := os.ReadFile(filepath.Join(s.issueDir(id), "issue.md"))
 	if err != nil {
 		return nil
 	}
-	var names []string
-	for _, e := range ents {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	out := make([]model.Entry, 0, len(names))
-	for _, n := range names {
-		data, err := os.ReadFile(filepath.Join(dir, n))
-		if err != nil {
-			continue
-		}
-		fm, body := splitFrontmatter(data)
-		var en model.Entry
-		if len(fm) > 0 {
-			if err := yaml.Unmarshal(fm, &en); err != nil {
-				continue
-			}
-		}
-		en.Body = body
-		en.File = n
-		out = append(out, en)
-	}
-	return out
+	_, body := splitFrontmatter(data)
+	_, timeline := splitBodyEntries(body)
+	return parseEntries(timeline)
 }
 
 // ListIssues 返回全部任务，按 updated 倒序。
@@ -159,8 +143,20 @@ func (s *Store) writeIssueFile(iss model.Issue) error {
 	b.WriteString("---\n")
 	b.Write(fm)
 	b.WriteString("---\n")
-	b.WriteString(iss.Body)
+	// 保留文件里已有的时间线：iss.Body 只承载描述。
+	_, timeline := s.readTimeline(iss.ID)
+	b.WriteString(joinBodyEntries(iss.Body, timeline))
 	return os.WriteFile(p, []byte(b.String()), 0o644)
+}
+
+// readTimeline 读取 issue.md 中描述与时间线区块的原始文本。
+func (s *Store) readTimeline(id string) (string, string) {
+	data, err := os.ReadFile(filepath.Join(s.issueDir(id), "issue.md"))
+	if err != nil {
+		return "", ""
+	}
+	_, body := splitFrontmatter(data)
+	return splitBodyEntries(body)
 }
 
 // CreateIssue 分配 ID、建目录、写 issue.md 并提交。
@@ -179,9 +175,6 @@ func (s *Store) CreateIssue(in model.Issue) (model.Issue, error) {
 	if in.Status == "" {
 		in.Status = "todo"
 	}
-	if err := os.MkdirAll(filepath.Join(s.issueDir(id), "entries"), 0o755); err != nil {
-		return in, err
-	}
 	if err := s.writeIssueFile(in); err != nil {
 		return in, err
 	}
@@ -191,12 +184,8 @@ func (s *Store) CreateIssue(in model.Issue) (model.Issue, error) {
 	return in, nil
 }
 
-// appendEntryLocked 在持有锁时追加一条时间线文件。
+// appendEntryLocked 在持有锁时把一条跟进追加到 issue.md 的内联时间线。
 func (s *Store) appendEntryLocked(id string, in model.Entry) (model.Entry, error) {
-	dir := filepath.Join(s.issueDir(id), "entries")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return in, err
-	}
 	if in.Author == "" {
 		in.Author = "me"
 	}
@@ -206,30 +195,15 @@ func (s *Store) appendEntryLocked(id string, in model.Entry) (model.Entry, error
 	if in.Created == "" {
 		in.Created = time.Now().Format(time.RFC3339)
 	}
-	ents, _ := os.ReadDir(dir)
-	n := 0
-	for _, e := range ents {
-		if strings.HasSuffix(e.Name(), ".md") {
-			n++
-		}
+	if in.ID == "" {
+		in.ID = fmt.Sprintf("e-%d", time.Now().UnixNano())
 	}
-	n++
-	fname := fmt.Sprintf("%04d-%s-%s.md", n, time.Now().Format("20060102T150405"), sanitize(in.Author))
+	in.File = in.ID
 
-	fm, err := yaml.Marshal(in)
-	if err != nil {
-		return in, err
-	}
-	var b strings.Builder
-	b.WriteString("---\n")
-	b.Write(fm)
-	b.WriteString("---\n")
-	b.WriteString(in.Body)
-	if err := os.WriteFile(filepath.Join(dir, fname), []byte(b.String()), 0o644); err != nil {
-		return in, err
-	}
-	in.File = fname
-	return in, nil
+	desc, timeline := s.readTimeline(id)
+	ents := parseEntries(timeline)
+	ents = append(ents, in)
+	return in, s.writeTimeline(id, desc, ents)
 }
 
 // AddEntry 追加跟进并刷新任务的 updated。
@@ -255,16 +229,34 @@ func (s *Store) AddEntry(id string, in model.Entry) (model.Entry, error) {
 	return en, nil
 }
 
-// entryPath 返回某条跟进的时间线文件路径；不存在则报错。
-func (s *Store) entryPath(id, file string) (string, error) {
-	if file == "" || strings.ContainsAny(file, "/\\") {
-		return "", i18n.New(i18n.EntryNotFound, file)
+// writeTimeline 重写 issue.md 的正文（描述 + 时间线），保留 frontmatter。
+func (s *Store) writeTimeline(id, desc string, ents []model.Entry) error {
+	iss, err := s.readIssueFile(id)
+	if err != nil {
+		return i18n.New(i18n.IssueNotFound, id)
 	}
-	p := filepath.Join(s.issueDir(id), "entries", file)
-	if _, err := os.Stat(p); err != nil {
-		return "", i18n.New(i18n.EntryNotFound, file)
+	iss.Body = desc
+	p := filepath.Join(s.issueDir(id), "issue.md")
+	fm, err := yaml.Marshal(iss)
+	if err != nil {
+		return err
 	}
-	return p, nil
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.Write(fm)
+	b.WriteString("---\n")
+	b.WriteString(joinBodyEntries(desc, formatEntries(ents)))
+	return os.WriteFile(p, []byte(b.String()), 0o644)
+}
+
+// findEntry 在时间线中查找指定标识的条目。
+func findEntry(ents []model.Entry, key string) (int, model.Entry, bool) {
+	for i, en := range ents {
+		if en.ID == key || en.File == key {
+			return i, en, true
+		}
+	}
+	return -1, model.Entry{}, false
 }
 
 // UpdateEntry 改写一条跟进的内容，并标记 edited（status 状态变更条目不可改）。
@@ -272,79 +264,46 @@ func (s *Store) UpdateEntry(id, file, body string) (model.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, err := s.readIssueFile(id); err != nil {
-		return model.Entry{}, i18n.New(i18n.IssueNotFound, id)
-	}
-	p, err := s.entryPath(id, file)
-	if err != nil {
-		return model.Entry{}, err
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return model.Entry{}, err
-	}
-	fm, _ := splitFrontmatter(data)
-	var en model.Entry
-	if len(fm) > 0 {
-		if err := yaml.Unmarshal(fm, &en); err != nil {
-			return model.Entry{}, err
-		}
+	desc, timeline := s.readTimeline(id)
+	ents := parseEntries(timeline)
+	idx, en, ok := findEntry(ents, file)
+	if !ok {
+		return model.Entry{}, i18n.New(i18n.EntryNotFound, file)
 	}
 	if en.Type == "status" {
 		return model.Entry{}, i18n.New(i18n.EntryNotEditable)
 	}
 	en.Body = body
 	en.Edited = true
-	fm2, err := yaml.Marshal(en)
-	if err != nil {
+	ents[idx] = en
+	if err := s.writeTimeline(id, desc, ents); err != nil {
 		return model.Entry{}, err
 	}
-	var b strings.Builder
-	b.WriteString("---\n")
-	b.Write(fm2)
-	b.WriteString("---\n")
-	b.WriteString(body)
-	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
+	if err := s.commit(fmt.Sprintf("%s: edit %s", id, en.ID)); err != nil {
 		return model.Entry{}, err
 	}
-	if err := s.commit(fmt.Sprintf("%s: edit %s", id, file)); err != nil {
-		return model.Entry{}, err
-	}
-	en.File = file
 	return en, nil
 }
 
-// DeleteEntry 删除一条跟进文件（status 状态变更条目不可删）。
+// DeleteEntry 删除一条跟进（status 状态变更条目不可删）。
 func (s *Store) DeleteEntry(id, file string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if _, err := s.readIssueFile(id); err != nil {
-		return i18n.New(i18n.IssueNotFound, id)
-	}
-	p, err := s.entryPath(id, file)
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return err
-	}
-	fm, _ := splitFrontmatter(data)
-	var en model.Entry
-	if len(fm) > 0 {
-		_ = yaml.Unmarshal(fm, &en)
+	desc, timeline := s.readTimeline(id)
+	ents := parseEntries(timeline)
+	idx, en, ok := findEntry(ents, file)
+	if !ok {
+		return i18n.New(i18n.EntryNotFound, file)
 	}
 	if en.Type == "status" {
 		return i18n.New(i18n.EntryNotEditable)
 	}
-	if err := os.Remove(p); err != nil {
+	ents = append(ents[:idx], ents[idx+1:]...)
+	if err := s.writeTimeline(id, desc, ents); err != nil {
 		return err
 	}
-	if err := s.commit(fmt.Sprintf("%s: remove %s", id, file)); err != nil {
-		return err
-	}
-	return nil
+	return s.commit(fmt.Sprintf("%s: remove %s", id, en.ID))
 }
 
 // UpdateIssue 修改任务字段；状态变化时自动补一条 status 条目。
