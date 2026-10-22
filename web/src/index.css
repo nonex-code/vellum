@@ -599,21 +599,56 @@ body {
   flex-direction: column;
   min-height: 100%;
 }
+/* antd 的 <App> 会在 #root 和 .app-shell 之间插一层 .ant-app（height:auto），
+   会切断 height 百分比链；全屏视图下必须把它也拉成确定高度。 */
+#root > .ant-app:has(.page-pageboard) {
+  height: 100%;
+}
+/* 全屏视图（看板等）：把壳锁到视口高，高度才能沿 flex 链传到看板列。
+   其它页面保持 min-height，内容多时仍整页滚动。 */
+.app-shell:has(.page-pageboard) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
 .app-topbar {
   height: 60px;
   line-height: normal;
 }
 .app-body {
   display: flex;
-  align-items: flex-start;
+  /* 主区需要拿到确定高度才能让内部看板/甘特自行滚动；
+     侧栏自己有 height: calc(100vh - 60px) + sticky，不受 stretch 影响。 */
+  align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
 }
 .app-main {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+/* .page 是 .app-main 的最后一个子项（topbar 之上还有 viewNav/breadcrumb）。
+   默认保持原样（内容多就把页面顶长、整页滚动）。
+   只有「全屏视图」（看板等带 .page-pageboard 的页面）才需要锁定到视口高，
+   用 :has() 精确圈定，不影响其它页面。 */
+.app-main > .page:has(> .page-pageboard) {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* 全屏视图不需要底部留白，否则看板下方会空出 100px */
+  padding-bottom: 0;
+  /* 让 .page-pageboard 成为 flex 子项，才能吃到 .page 的剩余高度 */
+  display: flex;
+  flex-direction: column;
+  /* 内层自己有滚动，外层不再溢出到视口外 */
+  overflow: hidden;
+}
+/* 全屏视图内的页头收紧，把高度留给主体 */
+.page-pageboard > .page-header {
+  margin-bottom: 16px;
+  flex: none;
 }
 
 /* ---------- 侧栏（项目集 → 项目 → 视图） ---------- */
@@ -681,11 +716,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sb-views {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
 .sb-item {
   display: flex;
   align-items: center;
@@ -714,9 +744,6 @@ body {
   width: 16px;
   justify-content: center;
   flex: 0 0 auto;
-}
-.sb-program-item {
-  padding-left: 14px;
 }
 .sb-sep {
   display: flex;
@@ -806,17 +833,6 @@ body {
   color: var(--ink);
   font-weight: 600;
 }
-.sb-proj-caret {
-  display: inline-flex;
-  font-size: 9px;
-  color: var(--ink-faint);
-  transition: transform 0.15s ease;
-  flex: 0 0 auto;
-}
-.sb-proj.active .sb-proj-caret {
-  transform: rotate(90deg);
-  color: var(--primary);
-}
 .sb-proj-avatar {
   display: none;
   width: 22px;
@@ -831,9 +847,6 @@ body {
 }
 .sidebar.collapsed .sb-proj-avatar {
   display: inline-flex;
-}
-.sidebar.collapsed .sb-proj-caret {
-  display: none;
 }
 .sb-proj-name {
   flex: 1;
@@ -866,17 +879,6 @@ body {
   margin: 0 3px;
 }
 .sidebar.collapsed .sb-recent-dot {
-  display: none;
-}
-.sb-sub {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 1px 0 4px 14px;
-  border-left: 1px solid var(--border);
-  padding-left: 6px;
-}
-.sidebar.collapsed .sb-sub {
   display: none;
 }
 .sb-add {
@@ -935,6 +937,44 @@ body {
   justify-content: center;
 }
 
+/* ---------- 视图切换栏（面包屑上方） ---------- */
+.view-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 28px 0;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+.view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px 9px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color 0.14s, background 0.14s, border-color 0.14s;
+}
+.view-tab:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.view-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 500;
+}
+.view-tab-ico {
+  display: inline-flex;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
 /* ---------- 面包屑 ---------- */
 .wb-crumb {
   padding: 14px 28px 0;
@@ -990,9 +1030,7 @@ body {
     width: 56px;
   }
   .sidebar .sb-text,
-  .sidebar .sb-badge,
-  .sidebar .sb-sub,
-  .sidebar .sb-proj-caret {
+  .sidebar .sb-badge {
     display: none;
   }
   .sidebar .sb-sep::after {
@@ -1025,12 +1063,25 @@ body {
 }
 
 /* ---------- 看板 ---------- */
+/* 看板页占满主内容区：
+   .app-body/.app-main 已约束到视口高，含 .page-pageboard 的 .page 被降为 flex 容器，
+   看板主体再由 .board 吃满页头以下的剩余高度，列内纵向滚动。 */
+.page-pageboard {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .board {
   display: flex;
   gap: 16px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 16px;
-  align-items: flex-start;
+  align-items: stretch;
+  /* 占满 .page-pageboard 的剩余高度（视口 - topbar - viewnav - breadcrumb - 页头） */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .board-col {
   flex: 0 0 280px;
@@ -1039,6 +1090,10 @@ body {
   border-radius: var(--radius);
   padding: 12px;
   min-height: 160px;
+  /* 列等高撑满看板：头部固定，正文区域自己滚动 */
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
   transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 .board-col.is-over {
@@ -1051,11 +1106,29 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 2px 4px 12px;
+  flex: none;
 }
 .board-col-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 滚动时给卡片留一点呼吸，避免贴边 */
+  padding-right: 2px;
+  padding-bottom: 2px;
+  overscroll-behavior: contain;
+}
+.board-col-body::-webkit-scrollbar {
+  width: 8px;
+}
+.board-col-body::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+}
+.board-col-body::-webkit-scrollbar-track {
+  background: transparent;
 }
 .board-card {
   background: var(--surface);
@@ -1063,6 +1136,8 @@ body {
   border-radius: var(--radius-sm);
   padding: 12px 13px;
   cursor: pointer;
+  /* 列内滚动时卡片保持自然高度，不被 flex 压缩 */
+  flex: none;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.12s, border-color 0.12s, opacity 0.12s, transform 0.12s;
 }
@@ -1097,7 +1172,15 @@ body {
   color: var(--ink-faint);
 }
 .board-empty {
-  padding: 10px 0 4px;
+  /* 空列占满列体高度，提示文字垂直居中 */
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0;
 }
 
 /* ---------- 子任务 ---------- */
@@ -1600,6 +1683,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px;
+  flex: none;
   box-shadow: var(--shadow-sm);
 }
 

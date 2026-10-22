@@ -35,6 +35,7 @@ export const chrome: Record<string, string> = {
   '收起侧栏': 'Collapse sidebar',
   '甘特图': 'Gantt chart',
   '甘特': 'Gantt',
+  '日历': 'Calendar',
   '项目集管理': 'Portfolio management',
   '组织形式': 'Organization',
   '配置中心': 'Configuration center',

@@ -11,6 +11,7 @@ import type { ProjectMeta, RepoInfo, Schema } from './types'
 import TopBar from './components/TopBar'
 import Sidebar from './components/Sidebar'
 import Breadcrumb from './components/Breadcrumb'
+import ViewNav from './components/ViewNav'
 import CommandPalette from './components/CommandPalette'
 import Welcome from './onboarding/Welcome'
 import Home from './pages/Home'
@@ -21,6 +22,7 @@ import IssueNew from './pages/IssueNew'
 import IssueDetail from './pages/IssueDetail'
 import Projects from './pages/Projects'
 import Gantt from './pages/Gantt'
+import Calendar from './pages/Calendar'
 import Docs from './pages/Docs'
 import Settings from './pages/Settings'
 
@@ -32,7 +34,7 @@ function isTyping(el: EventTarget | null): boolean {
 }
 
 // 旧的 /programs 子视图名，迁到根项目时要带上 include=children 才是聚合视图。
-const AGG_VIEWS = new Set(['issues', 'board', 'gantt', 'search'])
+const AGG_VIEWS = new Set(['issues', 'board', 'gantt', 'calendar', 'docs', 'search'])
 
 export default function App() {
   const [repo, setRepo] = useState<RepoInfo | null>(null)
@@ -172,6 +174,7 @@ export default function App() {
         <div className="app-body">
           <Sidebar onOpenPalette={() => setPaletteOpen(true)} />
           <main className="app-main">
+            <ViewNav />
             <Breadcrumb />
             <div className="page" key={pageKey}>
               <Routes>
@@ -200,6 +203,7 @@ function ProjectRoutes() {
       <Route path="new" element={<IssueNew />} />
       <Route path="issue/:id" element={<IssueDetail />} />
       {schema.modules.gantt && <Route path="gantt" element={<Gantt />} />}
+      {schema.modules.calendar && <Route path="calendar" element={<Calendar />} />}
       {schema.modules.docs && <Route path="docs" element={<Docs />} />}
       <Route path="settings/*" element={<Settings />} />
       <Route path="*" element={<Navigate to="." replace />} />

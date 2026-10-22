@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ApartmentOutlined,
-  BarsOutlined,
-  BookOutlined,
-  HomeOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
-  ProjectOutlined,
   PushpinFilled,
   PushpinOutlined,
-  RightOutlined,
   SearchOutlined,
-  UnorderedListOutlined,
 } from '@ant-design/icons'
 
 import { api } from '../api'
 import { useApp } from '../context'
 import { t } from '../i18n'
-import { ROOT_PID, projectAggPath, projectPath } from '../nav'
+import { ROOT_PID, projectPath } from '../nav'
 import type { ProjectMeta, ProjectStat } from '../types'
 import NewProjectModal from './NewProjectModal'
 
@@ -47,25 +40,16 @@ function saveJSON(key: string, value: unknown) {
   }
 }
 
-interface ViewDef {
-  to: string
-  label: string
-  icon: ReactNode
-  end?: boolean
-  show?: boolean
-}
-
 type ProjGroup = 'pinned' | 'plain'
 
-// Sidebar 是常驻的层级导航：项目树（根项目 → 子项目 → 视图）。
-// 根项目展开为聚合层（总览/全部任务…）；子项目展开为自身视图。
+// Sidebar 是常驻的项目列表：根项目（仓库）+ 收藏项目 + 全部项目。
+// 项目下的视图（任务/看板/甘特/文档/搜索）由主内容区顶部的 ViewNav 呈现。
 // 子项目可分「收藏 / 全部项目」，支持拖拽排序与置顶；行尾徽标显示进行中/逾期数量。
 export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { schema, repo, reload, projectId, projects } = useApp()
   const loc = useLocation()
   const nav = useNavigate()
   const multi = repo.mode === 'multi'
-  const atRoot = projectId === ROOT_PID
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1')
   const [creating, setCreating] = useState(false)
@@ -139,36 +123,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     })
   }
 
-  function projectViews(id: string): ViewDef[] {
-    const all: ViewDef[] = [
-      { to: projectPath(id, '/issues'), label: t('任务'), icon: <UnorderedListOutlined /> },
-      { to: projectPath(id, '/board'), label: t('看板'), icon: <ProjectOutlined />, show: schema.modules.board },
-      { to: projectPath(id, '/gantt'), label: t('甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
-      { to: projectPath(id, '/docs'), label: t('文档'), icon: <BookOutlined />, show: schema.modules.docs },
-      { to: projectPath(id, '/search'), label: t('搜索'), icon: <SearchOutlined />, show: schema.modules.search },
-    ]
-    return all.filter((v) => v.show !== false)
-  }
-
-  // 根项目的展开视图：multi 下是聚合层，single 下就是自身的普通视图。
-  const rootViews: ViewDef[] = multi
-    ? [
-        { to: projectPath(ROOT_PID, '/'), label: t('总览'), icon: <ApartmentOutlined />, end: true },
-        { to: projectAggPath(ROOT_PID, '/issues'), label: t('全部任务'), icon: <UnorderedListOutlined /> },
-        { to: projectAggPath(ROOT_PID, '/board'), label: t('全部看板'), icon: <ProjectOutlined />, show: schema.modules.board },
-        { to: projectAggPath(ROOT_PID, '/gantt'), label: t('全部甘特'), icon: <BarsOutlined />, show: schema.modules.gantt },
-        { to: projectAggPath(ROOT_PID, '/search'), label: t('全部搜索'), icon: <SearchOutlined />, show: schema.modules.search },
-      ]
-    : [
-        { to: projectPath(ROOT_PID, '/'), label: t('首页'), icon: <HomeOutlined />, end: true },
-        ...projectViews(ROOT_PID),
-      ]
-
-  const cls =
-    (base: string) =>
-    ({ isActive }: { isActive: boolean }) =>
-      base + (isActive ? ' active' : '')
-
   // ---- 项目分组：收藏 / 全部项目 ----
   const byId = useMemo(() => {
     const m = new Map<string, ProjectMeta>()
@@ -204,12 +158,12 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
     persist(next, orderedIds)
   }
 
-  function dropOn(targetId: string, group: 'pinned' | 'plain') {
+  function dropOn(targetId: string, group: ProjGroup) {
     const from = dragId
     setDragId(null)
     setOverId(null)
     if (!from || from === targetId) return
-    const fromGroup: 'pinned' | 'plain' = pinnedSet.has(from) ? 'pinned' : 'plain'
+    const fromGroup: ProjGroup = pinnedSet.has(from) ? 'pinned' : 'plain'
     if (fromGroup !== group) return
     const next = orderedIds.slice()
     const fi = next.indexOf(from)
@@ -259,9 +213,6 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
             title={p.name}
             className={'sb-proj-head' + (active ? ' active' : '')}
           >
-            <span className="sb-proj-caret">
-              <RightOutlined />
-            </span>
             <span className="sb-proj-avatar">{p.name.slice(0, 1)}</span>
             <span className="sb-text sb-proj-name">{p.name}</span>
           </Link>
@@ -287,54 +238,28 @@ export default function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }
             {isPinned ? <PushpinFilled /> : <PushpinOutlined />}
           </button>
         </div>
-        {active && (
-          <div className="sb-sub">
-            {projectViews(p.id).map((v) => (
-              <NavLink key={v.to} to={v.to} end={v.end} title={v.label} className={cls('sb-item')}>
-                <span className="sb-ico">{v.icon}</span>
-                <span className="sb-text">{v.label}</span>
-              </NavLink>
-            ))}
-          </div>
-        )}
       </div>
     )
   }
+
+  const rootActive = projectId === ROOT_PID
 
   return (
     <>
       <aside className={'sidebar' + (collapsed ? ' collapsed' : '')}>
         <div className="sb-scroll">
-          {/* 项目树根节点：仓库本身，也是聚合层的入口 */}
+          {/* 根项目：仓库本身 */}
           <NavLink
             to={projectPath(ROOT_PID, '/')}
             end
             title={workspaceName}
-            className={cls('sb-program') + (atRoot ? ' active' : '')}
+            className={'sb-proj-head sb-program' + (rootActive ? ' active' : '')}
           >
             <span className="sb-logo">
               <img src="/logo.png" alt="Vellum" className="sb-logo-img" />
             </span>
             <span className="sb-text sb-program-name">{workspaceName}</span>
           </NavLink>
-
-          {/* 根项目视图：multi 下为聚合层（全部任务…），single 下为自身的普通视图 */}
-          <div className="sb-views">
-            {rootViews
-              .filter((v) => v.show !== false)
-              .map((v) => (
-                <NavLink
-                  key={v.to}
-                  to={v.to}
-                  end={v.end}
-                  title={v.label}
-                  className={cls('sb-item sb-program-item')}
-                >
-                  <span className="sb-ico">{v.icon}</span>
-                  <span className="sb-text">{v.label}</span>
-                </NavLink>
-              ))}
-          </div>
 
           {multi && (
             <>
